@@ -30,6 +30,19 @@
 
 
 
+### Protoboard (en diseno, ver docs/PROTOBOARD.md)
+
+- Generar las realizaciones NAND-only y NOR-only: hoy no existen ni su diagrama.
+- Modelo de chips con pinouts como datos, y los tres modos de seleccion (fiel al
+  diagrama, forzado por el usuario, automatico al ancho mayor).
+- Colocacion y ruteo sin colisiones, varias protoboards con sus puentes de + y -.
+- Extremos elegibles: puntos, LED+resistencia, display de 7 y de 16 segmentos en
+  anodo y en catodo comun. Ojo con la polaridad: anodo comun enciende en bajo.
+- **Nota:** el tope de 63 columnas y esta lista de componentes son por donde se
+  empieza, no por donde se acaba. Incluir mas componentes y mas tamanos de
+  protoboard; capaz estamos limitados de pensamiento.
+
+
 ## Release 3 — Maquinas de estado (en diseño)
 
 Objetivo: que ktool reciba un diagrama / tabla de estados y entregue los pasos
