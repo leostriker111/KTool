@@ -22,6 +22,15 @@
 - No compiten por la forma recomendada: en compuertas casi nunca ganan, y su ventaja
   real es en encapsulados, que es cosa del protoboard.
 - Diseno completo de la funcion de protoboard en `docs/PROTOBOARD.md`.
+- Catalogo de circuitos integrados (`ktool/proto/chips.py`): 12 chips con su pinout
+  **leido de la hoja de datos**, no de memoria. Cada entrada dice de donde salio y como
+  se comprobo. La estructura de compuertas se deduce de los nombres de los pines, para
+  que no haya una segunda copia del dato que se desincronice.
+- Molde ajustable del encapsulado (`ktool/proto/dip.py`): un solo dibujo que se calcula
+  del numero de pines, en vez de un SVG por chip. Sirve de 4 a 40 patas, con el ancho
+  de hilera correcto y el relieve del plastico.
+- `herramientas/leer_pinout.py`: el lector que saco los pinouts de los datasheets,
+  cruzando hasta tres lecturas independientes del mismo documento.
 
 ## 0.4.0
 
