@@ -21,6 +21,9 @@ jobs:
       - name: Importar el paquete
         run: python -c "import ktool; print(ktool.__version__)"
 
+      - name: Pruebas
+        run: python -m unittest discover -s tests -v
+
       - name: Resolver una tabla (minterminos)
         run: python -m ktool -n 3 -m 1,4,5,6 -d 2,7 --text
 

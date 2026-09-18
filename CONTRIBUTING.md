@@ -25,10 +25,14 @@ python -m ktool gui
 Antes de mandar un PR, corre las mismas verificaciones que la integración continua:
 
 ```powershell
+python -m unittest discover -s tests -v
 python -c "import ktool"
 python -m ktool -e "A^B^C" --text
 python -m ktool -n 4 -m 0,1,2,3,8,9 --out salida.html
 ```
+
+Las pruebas usan `unittest` de la biblioteca estándar: no hay nada que instalar.
+Si arreglas un error, agrega antes la prueba que lo reproduce.
 
 ## Estilo
 

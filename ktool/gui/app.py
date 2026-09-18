@@ -671,7 +671,8 @@ class App:
             return
 
         try:
-            ast = expr.parse(text)
+            # llena una columna de la tabla: las variables son letras sueltas
+            ast = expr.parse(text, letras_sueltas=True)
             used = set()
             expr.collect_vars(ast, used)
             unknown = used - set(variables)

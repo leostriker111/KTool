@@ -87,5 +87,6 @@ class Parser:
         raise ValueError(f"operando inesperado: {t}")
 
 
-def parse(text):
-    return Parser(tokenize(text)).parse()
+def parse(text, letras_sueltas=False):
+    """letras_sueltas: cada letra es una variable (tabla de verdad). Ver lexer."""
+    return Parser(tokenize(text, letras_sueltas)).parse()
