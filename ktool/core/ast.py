@@ -43,8 +43,11 @@ def evaluate(node, env):
 
 
 def build_output(text, nvars=None):
-    """Devuelve (variables_ordenadas, valores) para todas las combinaciones."""
-    ast = parse(text)
+    """Devuelve (variables_ordenadas, valores) para todas las combinaciones.
+
+    Las variables de una tabla de verdad son letras sueltas: `AB` es A AND B.
+    """
+    ast = parse(text, letras_sueltas=True)
     found = set()
     collect_vars(ast, found)
     variables = sorted(found)
