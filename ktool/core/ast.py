@@ -51,11 +51,13 @@ def build_output(text, nvars=None):
     found = set()
     collect_vars(ast, found)
     variables = sorted(found)
-    if nvars is not None and nvars > len(variables):
-        # rellena con variables sin usar para respetar el tamano pedido
-        from .table import VAR_NAMES
+    from .table import MIN_VARS, VAR_NAMES
 
-        extra = [v for v in VAR_NAMES if v not in variables][: nvars - len(variables)]
+    # rellena con variables sin usar para respetar el tamano pedido, y nunca
+    # baja del minimo (una expresion de una sola letra sigue dando una tabla)
+    objetivo = max(nvars or 0, MIN_VARS)
+    if objetivo > len(variables):
+        extra = [v for v in VAR_NAMES if v not in variables][: objetivo - len(variables)]
         variables = sorted(variables + extra)
     n = len(variables)
     vals = []

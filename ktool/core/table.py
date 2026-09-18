@@ -11,8 +11,31 @@ MAX_OUTPUTS = 32
 VAR_NAMES = ["A", "B", "C", "D", "E", "F"]
 
 
+def validar_nvars(n):
+    """Numero de variables admitido. Lanza ValueError con el motivo."""
+    if isinstance(n, bool) or not isinstance(n, int):
+        raise ValueError(f"el numero de variables debe ser entero (recibi {n!r})")
+    if n < MIN_VARS or n > MAX_VARS:
+        raise ValueError(
+            f"el numero de variables debe estar entre {MIN_VARS} y {MAX_VARS}; pediste {n}"
+        )
+    return n
+
+
+def validar_indices(indices, nvars, que="mintermino"):
+    """Todos los indices tienen que caer dentro de la tabla."""
+    limite = 1 << nvars
+    for i in indices:
+        if not 0 <= i < limite:
+            raise ValueError(
+                f"el {que} {i} no existe con {nvars} variables "
+                f"(validos: 0 a {limite - 1})"
+            )
+    return list(indices)
+
+
 def default_vars(n):
-    return VAR_NAMES[:n]
+    return VAR_NAMES[:validar_nvars(n)]
 
 
 def parse_value(tok):
@@ -49,7 +72,7 @@ class TruthTable:
     """n variables, 2^n filas, una o varias salidas, columna de notas opcional."""
 
     def __init__(self, nvars, variables=None, outputs=None, notes=None):
-        self.nvars = nvars
+        self.nvars = validar_nvars(nvars)
         self.rows = 1 << nvars
         self.variables = list(variables) if variables else default_vars(nvars)
         # outputs: dict nombre -> lista de 0/1/'x' (largo = rows)
@@ -70,10 +93,20 @@ class TruthTable:
 
     @classmethod
     def from_minterms(cls, nvars, minterms, dontcares=None, name="Y", variables=None):
+        validar_nvars(nvars)
+        dontcares = list(dontcares or [])
+        validar_indices(minterms, nvars, "mintermino")
+        validar_indices(dontcares, nvars, "don't care")
+        repetidos = sorted(set(minterms) & set(dontcares))
+        if repetidos:
+            raise ValueError(
+                "estos indices estan en minterminos y en don't cares a la vez: "
+                + ", ".join(str(i) for i in repetidos)
+            )
         vals = [0] * (1 << nvars)
         for m in minterms:
             vals[m] = 1
-        for d in dontcares or []:
+        for d in dontcares:
             vals[d] = DC
         return cls(nvars, variables, {name: vals})
 
@@ -82,6 +115,11 @@ class TruthTable:
         from .ast import build_output
 
         variables, vals = build_output(expr_text, nvars)
+        if len(variables) > MAX_VARS:
+            raise ValueError(
+                f"la expresion usa {len(variables)} variables "
+                f"({', '.join(variables)}); el maximo son {MAX_VARS} (A a {VAR_NAMES[-1]})"
+            )
         return cls(len(variables), variables, {name: vals})
 
     # -- consultas por salida --

@@ -9,6 +9,10 @@
   congelaba la ventana. La cobertura ya no expande el producto de Petrick: reduce por
   esenciales y dominancia, y solo ramifica con poda sobre lo que quede. La misma respuesta
   exacta y minima, en centesimas de segundo (#2).
+- Arreglado: la CLI ya valida sus entradas. `MIN_VARS`/`MAX_VARS` existian pero solo la
+  GUI los respetaba, asi que `-n 9` daba basura, un mintermino fuera de rango tronaba con
+  un traceback y uno negativo se envolvia en silencio a otra tabla. Ahora cada caso sale
+  con su motivo y codigo distinto de cero (#3).
 
 ## 0.4.0
 
