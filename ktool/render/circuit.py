@@ -35,6 +35,19 @@ def _xor_gate(x, y, w, h):
     )
 
 
+def _gate_svg(kind, x, y, w, h):
+    """Dibuja and/or/nand/nor. Las universales son la misma figura con bolita."""
+    negada = kind in ("nand", "nor")
+    base = "and" if kind in ("and", "nand") else "or"
+    ancho = w - 8 if negada else w
+    path = _and_path(x, y, ancho, h) if base == "and" else _or_path(x, y, ancho, h)
+    svg = f'<path d="{path}" fill="#222" stroke="#000"/>'
+    if negada:
+        svg += (f'<circle cx="{x + ancho + 4}" cy="{y + h/2}" r="4" '
+                f'fill="white" stroke="#000"/>')
+    return svg
+
+
 def _not_gate(x, y, h):
     return (
         f'<path d="M {x},{y} L {x},{y + h} L {x + h*0.85},{y + h/2} Z" '
@@ -45,7 +58,7 @@ def _not_gate(x, y, h):
 
 def solution_terms(solution):
     """Lista de terminos como listas de literales (str)."""
-    invert = solution.form == "pos"
+    invert = solution.form in ("pos", "nor")
     terms = []
     for p in solution.patterns:
         lits = term_literals(p, solution.variables, polarity_invert=invert)
@@ -117,8 +130,15 @@ def circuit_svg(solution, output_name="Y"):
             f'<text x="10" y="30" font-family="Georgia" font-size="15">{_esc(output_name)} = 0</text></svg>'
         )
 
-    inner_gate = "and" if form == "sop" else "or"
-    outer_gate = "or" if form == "sop" else "and"
+    if form == "nand":
+        inner_gate = outer_gate = "nand"
+    elif form == "nor":
+        inner_gate = outer_gate = "nor"
+    elif form == "sop":
+        inner_gate, outer_gate = "and", "or"
+    else:
+        inner_gate, outer_gate = "or", "and"
+    universal = form in ("nand", "nor")
 
     # literales usados (rieles)
     literals = []
@@ -169,6 +189,9 @@ def circuit_svg(solution, output_name="Y"):
         )
 
     single_term = len(terms) == 1
+    # NAND/NOR con un solo termino de un solo literal: las dos inversiones se
+    # cancelan y no hace falta ninguna compuerta (Y = el literal, y ya)
+    sin_compuertas = universal and single_term and len(terms[0]) == 1
 
     for j, t in enumerate(terms):
         gy = term_y[j]
@@ -177,7 +200,7 @@ def circuit_svg(solution, output_name="Y"):
         out_point_x = gx + gate_w
         out_point_y = gy + gh / 2
 
-        if len(t) == 1:
+        if len(t) == 1 and (not universal or sin_compuertas):
             # un literal: conexion directa al riel, sin compuerta
             lit = t[0]
             x = rail_x[lit]
@@ -188,9 +211,24 @@ def circuit_svg(solution, output_name="Y"):
                 f'<line x1="{x}" y1="{out_point_y}" x2="{out_point_x}" y2="{out_point_y}" '
                 f'stroke="#000" stroke-width="1.5"/>'
             )
+        elif len(t) == 1:
+            # en NAND/NOR el literal suelto SI necesita invertirse antes de la
+            # compuerta final, o la funcion sale complementada
+            lit = t[0]
+            x = rail_x[lit]
+            alto = min(gh, 26)
+            s.append(_not_gate(gx, out_point_y - alto / 2, alto))
+            s.append(f'<circle cx="{x}" cy="{out_point_y}" r="3" fill="#000"/>')
+            s.append(
+                f'<line x1="{x}" y1="{out_point_y}" x2="{gx}" y2="{out_point_y}" '
+                f'stroke="#000" stroke-width="1.5"/>'
+            )
+            s.append(
+                f'<line x1="{gx + alto * 0.85 + 8}" y1="{out_point_y}" '
+                f'x2="{out_point_x}" y2="{out_point_y}" stroke="#000" stroke-width="1.5"/>'
+            )
         else:
-            path = _and_path(gx, gy, gate_w, gh) if inner_gate == "and" else _or_path(gx, gy, gate_w, gh)
-            s.append(f'<path d="{path}" fill="#222" stroke="#000"/>')
+            s.append(_gate_svg(inner_gate, gx, gy, gate_w, gh))
             ninp = len(t)
             for k, lit in enumerate(t):
                 iy = gy + gh * (k + 1) / (ninp + 1)
@@ -202,18 +240,32 @@ def circuit_svg(solution, output_name="Y"):
                 )
 
         if single_term:
-            s.append(
-                f'<line x1="{out_point_x}" y1="{out_point_y}" x2="{out_x}" y2="{out_point_y}" '
-                f'stroke="#000" stroke-width="1.5"/>'
-            )
+            if universal and not sin_compuertas:
+                # la compuerta final deshace la inversion de la primera; sin
+                # ella la salida seria el complemento de la funcion
+                alto = 24
+                nx = out_point_x + 26
+                s.append(
+                    f'<line x1="{out_point_x}" y1="{out_point_y}" x2="{nx}" y2="{out_point_y}" '
+                    f'stroke="#000" stroke-width="1.5"/>'
+                )
+                s.append(_not_gate(nx, out_point_y - alto / 2, alto))
+                s.append(
+                    f'<line x1="{nx + alto * 0.85 + 8}" y1="{out_point_y}" '
+                    f'x2="{out_x}" y2="{out_point_y}" stroke="#000" stroke-width="1.5"/>'
+                )
+            else:
+                s.append(
+                    f'<line x1="{out_point_x}" y1="{out_point_y}" x2="{out_x}" y2="{out_point_y}" '
+                    f'stroke="#000" stroke-width="1.5"/>'
+                )
             s.append(
                 f'<text x="{out_x + 6}" y="{out_point_y + 5}" font-size="15">{_esc(output_name)}</text>'
             )
 
     if not single_term:
         # compuerta final
-        opath = _or_path(or_x, or_y, gate_w, or_h) if outer_gate == "or" else _and_path(or_x, or_y, gate_w, or_h)
-        s.append(f'<path d="{opath}" fill="#222" stroke="#000"/>')
+        s.append(_gate_svg(outer_gate, or_x, or_y, gate_w, or_h))
         for j in range(len(terms)):
             iy = or_y + or_h * (j + 1) / (len(terms) + 1)
             oy = term_y[j] + term_h[j] / 2

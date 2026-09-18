@@ -62,8 +62,10 @@ def _build_parser():
     p.add_argument("--name", default="Y", help="nombre de la salida (default Y)")
 
     # control de salida
-    p.add_argument("--form", choices=["sop", "pos", "auto", "both"], default="auto",
-                   help="forma a mostrar (default auto = la mas barata)")
+    p.add_argument("--form", choices=["sop", "pos", "nand", "nor", "auto", "both"],
+                   default="auto",
+                   help="forma a mostrar: sop, pos, nand (solo NAND), nor (solo NOR), "
+                        "auto (la mas barata) o both")
     p.add_argument("--no-kmap", action="store_true", help="no incluir mapas de Karnaugh")
     p.add_argument("--no-circuit", action="store_true", help="no incluir circuitos")
     p.add_argument("--no-table", action="store_true", help="no incluir tabla de verdad")
@@ -124,6 +126,10 @@ def _print_text(table):
         print(f"\n[{name}]")
         print(f"  SOP : {name} = {sol['sop'].equation}   ({sol['sop'].cost()[0]} comp, {sol['sop'].cost()[1]} lit)")
         print(f"  POS : {name} = {sol['pos'].equation}   ({sol['pos'].cost()[0]} comp, {sol['pos'].cost()[1]} lit)")
+        for forma in ("nand", "nor"):
+            s = sol[forma]
+            print(f"  {forma.upper():<4}: {name} = {s.equation}   "
+                  f"({s.cost()[0]} comp, {s.cost()[1]} lit)")
         print(f"  best: {sol['best'].form.upper()} -> {name} = {sol['best'].equation}")
         if sol["parity"]:
             print(f"  xor : {name} = {sol['parity']['equation']}")

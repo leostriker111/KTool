@@ -14,6 +14,15 @@
   un traceback y uno negativo se envolvia en silencio a otra tabla. Ahora cada caso sale
   con su motivo y codigo distinto de cero (#3).
 
+## Protoboard (en construccion)
+
+- Realizaciones **NAND-only** y **NOR-only**: el motor las genera, con su ecuacion, su
+  costo, su diagrama con bolitas de negacion y sus siete lenguajes. `--form nand` y
+  `--form nor` en la CLI; en `--text` salen siempre junto al SOP y al POS.
+- No compiten por la forma recomendada: en compuertas casi nunca ganan, y su ventaja
+  real es en encapsulados, que es cosa del protoboard.
+- Diseno completo de la funcion de protoboard en `docs/PROTOBOARD.md`.
+
 ## 0.4.0
 
 - Reestructura en subpaquetes: core/render/gui.

@@ -14,7 +14,7 @@ from ._util import _esc, _attr
 class Options:
     def __init__(
         self,
-        form="auto",        # 'sop' | 'pos' | 'auto' | 'both'
+        form="auto",        # 'sop' | 'pos' | 'nand' | 'nor' | 'auto' | 'both'
         kmap=True,
         circuit=True,
         table=True,
@@ -34,7 +34,7 @@ class Options:
 def _forms_to_show(opt, best):
     if opt.form == "both":
         return ["sop", "pos"]
-    if opt.form in ("sop", "pos"):
+    if opt.form in ("sop", "pos", "nand", "nor"):
         return [opt.form]
     return [best.form]  # auto
 
@@ -165,6 +165,13 @@ def _kmap_for_form(vals, variables, sol, form):
         s = sol["sop"]
         pats = s.patterns if s.const is None else []
         return "K-map (agrupado en SOP)", pats, "sop"
+    if form in ("nand", "nor"):
+        # el NAND se arma sobre los grupos del SOP, y el NOR sobre los del POS:
+        # el mapa es el mismo, cambia la realizacion
+        base = "sop" if form == "nand" else "pos"
+        s = sol[base]
+        pats = s.patterns if s.const is None else []
+        return f"K-map {base.upper()} (base del {form.upper()})", pats, base
     s = sol[form]
     pats = s.patterns if s.const is None else []
     return f"K-map {form.upper()}", pats, form
