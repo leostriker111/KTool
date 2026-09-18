@@ -1,5 +1,11 @@
 # Cambios
 
+## Sin publicar
+
+- Arreglado: pegar dos letras vuelve a significar AND (`AB` = A AND B). Se leia como
+  una sola variable llamada `AB` y devolvia una funcion equivocada sin avisar (#1).
+- Pruebas automatizadas (`unittest`, sin dependencias) y la CI ya las corre.
+
 ## 0.4.0
 
 - Reestructura en subpaquetes: core/render/gui.
