@@ -73,23 +73,35 @@ lo que cuesta, no la compuerta.
 Los pinouts viven como **datos**, no como código — un diccionario por chip, igual que
 `OPS` en `codegen.py`. Agregar uno es una entrada, no un caso nuevo.
 
-| chip | qué trae |
-|---|---|
-| 7400 | cuatro NAND de 2 |
-| 7402 | cuatro NOR de 2 |
-| 7404 | seis inversores |
-| 7408 | cuatro AND de 2 |
-| 7410 | tres NAND de 3 |
-| 7411 | tres AND de 3 |
-| 7420 | dos NAND de 4 |
-| 7421 | dos AND de 4 |
-| 7427 | tres NOR de 3 |
-| 7432 | cuatro OR de 2 |
-| 7486 | cuatro XOR de 2 |
+| chip | qué trae | verificado |
+|---|---|---|
+| 7400 | cuatro NAND de 2 | sí — dos lecturas del datasheet + sn74hc00 |
+| 7402 | cuatro NOR de 2 | sí (ojo: las salidas van primero) |
+| 7404 | seis inversores | sí |
+| 7408 | cuatro AND de 2 | sí |
+| 7410 | tres NAND de 3 | sí |
+| 7411 | tres AND de 3 | sí |
+| 7420 | dos NAND de 4 | sí |
+| 7421 | dos AND de 4 | sí |
+| 7427 | tres NOR de 3 | sí |
+| 7432 | cuatro OR de 2 | sí |
+| 7486 | cuatro XOR de 2 | sí — dos datasheets independientes |
+| 4075 | tres OR de 3 | sí — tapa el hueco: la serie 74xx no trae OR de 3 |
+| 7430 | NAND de 8 | falta |
+| 7447 / 7448 | decodificador BCD a 7 segmentos (ánodo / cátodo común) | falta, y hace falta para los displays |
+| 7474 / 7476 | flip-flops D y JK | falta, para el Release 3 |
+| 74138 | decodificador 3 a 8 | leído, sin meter aún (no es compuerta) |
 
-> **Antes de publicar:** cada pinout se verifica contra su hoja de datos y se marca en el
-> archivo con la fuente. Un pin equivocado aquí le cuesta la práctica a alguien; es el
+> **Cómo se verifican.** `herramientas/leer_pinout.py` lee el pinout del PDF de tres
+> maneras independientes —el dibujo en texto, la tabla *Pin Functions*, y el dibujo
+> vectorial por coordenadas— y si se contradicen no devuelve nada. Entre los varios
+> encapsulados de una hoja se queda con el DIP por la convención de la serie: GND en el
+> pin n/2 y VCC en el n. Un pin equivocado aquí le cuesta la práctica a alguien; es el
 > único dato del proyecto que no se puede sacar de memoria.
+>
+> Las hojas de la familia **74LS son escaneadas** y no tienen capa de texto: no hay forma
+> de leerlas automático. Los pinouts salieron de la familia **74HC**, que es la misma
+> patita para estos números y sí trae hojas modernas.
 
 ## Los extremos
 
