@@ -82,6 +82,9 @@ def _build_parser():
                         "o automatico al ancho mayor")
     p.add_argument("--proto-chips",
                    help="chips permitidos para --proto-modo forzado (ej: 7400,7404)")
+    p.add_argument("--proto-color-salidas", metavar="COLOR",
+                   help="color de los cables de salida: 'arcoiris' (default), un "
+                        "nombre (red, blue, ...) o un hex (#1f77b4)")
     p.add_argument("--proto-separado", action="store_true",
                    help="una protoboard por salida, en vez de una sola con todo")
     p.add_argument("--proto-extremos",
@@ -212,6 +215,7 @@ def main(argv=None):
                      if args.proto_chips else None),
         proto_extremos=args.proto_extremos,
         proto_separado=args.proto_separado,
+        proto_color_salidas=args.proto_color_salidas,
     )
     html = build_report(table, opt)
     open_it = args.open or (args.out is None)

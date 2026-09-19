@@ -53,6 +53,18 @@
   cables metidos en los **agujeros libres** de cada columna. Los puentes largos entre
   tableros bajan en haz por la orilla, sin cruzar el campo de agujeros.
 - `--proto-separado`: una protoboard por salida, en vez de una sola con todo.
+- El cableado, otra vez: **cada cable con su propia altura**. Antes los carriles caian
+  en las filas enteras de la cuadricula y dos cables acababan encimados; ahora la banda
+  se reparte en float --con N cables, el k-esimo va a (k+1)/(N+1)-- con margen a los dos
+  lados. A lo alto el dibujo crece, asi que no hay razon para compartir altura.
+- Se fue el punteado: todos los cables son linea solida. El punteado solo marcaba los
+  saltos largos y confundia mas de lo que ayudaba.
+- **Los colores dicen algo**: los cables que entran a una misma compuerta van del mismo
+  color. El de las salidas se elige con `--proto-color-salidas`: arcoiris, un nombre
+  (red, blue...) o un hex.
+- Las resistencias, los LEDs y el display se dibujan como **componentes de verdad**,
+  ocupando sus columnas, en vez de un muñon por pin. De ahi salian las "salidas de mas"
+  y la protoboard vacia: ya no se abre un tablero que no lleve piezas.
 
 ## 0.4.0
 

@@ -248,28 +248,114 @@ class CablesPlanchados(unittest.TestCase):
         self.assertNotIn(" Q ", svg, "quedo una curva de Bezier")
         self.assertNotIn(" C ", svg)
 
-    def test_dos_cables_del_mismo_carril_no_se_traslapan(self):
-        """Es lo que evita que un cable se cruce con otro yendo en paralelo."""
+    def test_cada_cable_tiene_su_propia_altura(self):
+        """Lo que pidio Leonardo: nada de apilar cables en el mismo renglon.
+        Con N cables en una zona, el k-esimo va a (k+1)/(N+1) de la banda."""
         for forma in FORMAS:
             _, ruteo, _ = self._svg_de(forma)
-            por_carril = {}
-            for tr in ruteo["troncos"]:
-                clave = (tr["tablero"], tr["lado"], tr["carril"])
-                for otro in por_carril.get(clave, []):
-                    se_pisan = not (tr["col_max"] < otro["col_min"]
-                                    or tr["col_min"] > otro["col_max"])
-                    self.assertFalse(se_pisan,
-                                     f"{tr['nodo']} y {otro['nodo']} comparten carril")
-                por_carril.setdefault(clave, []).append(tr)
+            usados = {}
+            for cable in ruteo["cables"]:
+                for zona, (carril, total) in cable["carril_de_zona"].items():
+                    self.assertNotIn((zona, carril), usados,
+                                     f"{cable['nodo']} comparte carril con "
+                                     f"{usados.get((zona, carril))}")
+                    usados[(zona, carril)] = cable["nodo"]
+                    self.assertLess(carril, total)
+
+    def test_los_carriles_no_quedan_a_ras(self):
+        """Con margen a los dos lados: ni pegado al pin ni pegado a la orilla."""
+        for total in (1, 3, 8, 40):
+            alturas = [tablero._y_carril("abajo", k, total, 0) for k in range(total)]
+            self.assertEqual(len(set(alturas)), total, "hay dos carriles iguales")
+            self.assertEqual(alturas, sorted(alturas))
+            primero = alturas[0] - tablero._y_de("abajo", 0, 0)
+            self.assertGreater(primero, 1.0, "el primer carril quedo sobre el pin")
+
+    def test_la_separacion_entre_carriles_no_se_aplasta(self):
+        for total in (2, 10, 60):
+            alturas = [tablero._y_carril("abajo", k, total, 0) for k in range(total)]
+            huecos = [b - a for a, b in zip(alturas, alturas[1:])]
+            self.assertGreaterEqual(min(huecos), 4.0,
+                                    f"con {total} cables quedaron encimados")
 
     def test_se_usan_los_agujeros_libres_de_la_columna(self):
         """Una columna son cinco agujeros del mismo nodo: hay que usarlos."""
         _, ruteo, _ = self._svg_de()
-        dentro = [tr for tr in ruteo["troncos"]
-                  if tr["carril"] < tablero.FILAS_LIBRES]
+        self.assertTrue(ruteo["cables"])
+        # los primeros carriles caen dentro de las filas libres del tablero
+        dentro = [c for c in ruteo["cables"]
+                  if any(k < tablero.FILAS_LIBRES
+                         for k, _ in c["carril_de_zona"].values())]
         self.assertTrue(dentro, "ningun cable se metio en las filas libres")
-        # y los primeros carriles son justamente esas filas
-        self.assertEqual(tablero.FILAS_LIBRES, 4)
+
+
+class LosColoresDicenAlgo(unittest.TestCase):
+    def test_lo_que_entra_a_una_compuerta_va_del_mismo_color(self):
+        tabla = bcd_siete_segmentos()
+        net = netlist.construir(soluciones(tabla, "sop"), "sop", extremos="7seg_cc")
+        tableros = tablero.colocar(net)
+        ruteo = tablero.rutear(net, tableros)
+        chip_de = {p["ref"]: p["chip"] for p in net["pastillas"]}
+        por_compuerta = {}
+        for g in net["plan"].compuertas:
+            if g.chip is None:
+                continue
+            hueco = chips.compuertas(chip_de[g.chip])[g.hueco]
+            entradas = {(g.chip, pin) for pin in hueco["entradas"]}
+            colores = {c["color"] for c in ruteo["cables"]
+                       if (c["a"].rsplit("-", 1)[0],
+                           int(c["a"].rsplit("-", 1)[1])) in entradas}
+            if colores:
+                por_compuerta[g.id] = colores
+        for gid, colores in por_compuerta.items():
+            self.assertEqual(len(colores), 1,
+                             f"la compuerta {gid} recibe cables de {len(colores)} colores")
+
+    def test_el_color_de_salida_se_puede_fijar(self):
+        tabla = TruthTable(2, outputs={"Y": [0, 1, 1, 0]})
+        net = netlist.construir(soluciones(tabla, "sop"), "sop", extremos="led")
+        tableros = tablero.colocar(net)
+        ruteo = tablero.rutear(net, tableros, salidas_color="#0b6e4f")
+        hacia_salida = [c for c in ruteo["cables"]
+                        if c["a"].startswith("R") or c["a"].startswith("D")]
+        self.assertTrue(hacia_salida)
+        for c in hacia_salida:
+            self.assertEqual(c["color"], "#0b6e4f")
+
+    def test_acepta_nombre_y_hex_con_o_sin_gato(self):
+        self.assertEqual(tablero._resolver_color("red", 0), "red")
+        self.assertEqual(tablero._resolver_color("1f77b4", 0), "#1f77b4")
+        self.assertEqual(tablero._resolver_color("#1f77b4", 0), "#1f77b4")
+        arcoiris = {tablero._resolver_color("arcoiris", k) for k in range(5)}
+        self.assertGreater(len(arcoiris), 1, "arcoiris deberia variar")
+
+
+class LasPiezasSeVenComoSon(unittest.TestCase):
+    """Una resistencia ocupa dos columnas, no dos 'salidas' sueltas."""
+
+    def test_la_resistencia_y_el_led_ocupan_dos_columnas(self):
+        tabla = TruthTable(2, outputs={"Y": [0, 1, 1, 0]})
+        net = netlist.construir(soluciones(tabla, "sop"), "sop", extremos="led")
+        piezas = {p["tipo"]: p for t in tablero.colocar(net) for p in t["piezas"]}
+        self.assertEqual(piezas["resistencia"]["ancho"], 2)
+        self.assertEqual(piezas["led"]["ancho"], 2)
+
+    def test_el_display_va_a_caballo_del_canal(self):
+        tabla = bcd_siete_segmentos()
+        net = netlist.construir(soluciones(tabla, "sop"), "sop", extremos="7seg_cc")
+        display = next(p for t in tablero.colocar(net) for p in t["piezas"]
+                       if p["tipo"] == "display")
+        self.assertEqual(display["montaje"], "canal")
+        self.assertEqual(display["ancho"], 4)   # 8 pines
+
+    def test_ningun_tablero_queda_vacio(self):
+        """No se abre una protoboard de adorno."""
+        for forma in FORMAS:
+            tabla = bcd_siete_segmentos()
+            net = netlist.construir(soluciones(tabla, forma), forma,
+                                    extremos="7seg_cc")
+            for t in tablero.colocar(net):
+                self.assertTrue(t["piezas"], f"{forma}: tablero vacio")
 
 
 class UnaProtoPorSalida(unittest.TestCase):

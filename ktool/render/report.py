@@ -26,6 +26,7 @@ class Options:
         proto_chips=None,   # lista de chips para el modo forzado
         proto_extremos="puntos",   # puntos | led | 7seg_cc | 7seg_ca | 16seg_cc | 16seg_ca
         proto_separado=False,      # una protoboard por salida en vez de una sola
+        proto_color_salidas=None,  # None/'arcoiris', o un color fijo (nombre o hex)
     ):
         self.form = form
         self.kmap = kmap
@@ -39,6 +40,7 @@ class Options:
         self.proto_chips = proto_chips
         self.proto_extremos = proto_extremos
         self.proto_separado = proto_separado
+        self.proto_color_salidas = proto_color_salidas
 
 
 def _seccion_protoboard(table, solutions, opt):
@@ -100,9 +102,14 @@ def _un_protoboard(nombradas, forma, opt, encabezado):
         partes.append("<p class='hint'><b>Ojo:</b> el circuito quedo incompleto; "
                       "el dibujo no alcanza para armarlo.</p>")
 
-    svg, ruteo, tableros = _tab.dibujar(net, titulo=encabezado)
+    svg, ruteo, tableros = _tab.dibujar(
+        net, titulo=encabezado, salidas_color=opt.proto_color_salidas)
     partes.append(f"<div class='protowrap'>{svg}</div>")
 
+    partes.append("<p class='hint'>Los cables que entran a una misma compuerta van "
+                  "del mismo color. Las salidas del circuito llevan el suyo"
+                  + (f" ({_esc(str(opt.proto_color_salidas))})."
+                     if opt.proto_color_salidas else " (uno por salida).") + "</p>")
     partes.append("<h3>Lista de cables</h3>")
     partes.append("<p class='hint'>De aqui se arma: cada renglon es un cable. "
                   "Los pines de VCC y GND van a los rieles, no estan en esta lista.</p>")
