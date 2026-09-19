@@ -199,7 +199,7 @@ def _colores_por_pin(net, salidas_color=None):
 
 # ----------------------------------------------------------------- ruteo
 
-AIRE = 7                 # renglones de rejilla por fuera del tablero, cada lado
+AIRE = 22                # renglones de rejilla por fuera del tablero, cada lado
 PASO_AIRE = PASO * 0.55
 
 
@@ -336,8 +336,61 @@ def rutear(net, tableros, columnas=COLUMNAS, salidas_color=None):
             cables.append(_cable(rejs, nodo, color, a1, a2,
                                  f"{cf['ref']}-{cf['pin']} -> {c['ref']}-{c['pin']}"))
 
+    _desfasar(cables, rejs)
     return {"cables": cables, "alimentacion": alimentacion, "mapa": mapa,
             "sueltos": sueltos, "avisos": avisos, "rejillas": rejs}
+
+
+DESFASE = 2.4      # pixeles entre dos cables que corren pegados
+
+
+def _desfasar(cables, rejs):
+    """A los cables que comparten tramo se les da un desfase distinto.
+
+    Donde dos jumpers corren pegados --y en la columna de un agujero no hay de
+    otra-- se dibujan separados un poco, como se ven de verdad: dos cables uno
+    al lado del otro, no uno encima del otro.
+
+    Es un coloreo de grafos: los que se pisan son vecinos, y cada quien toma el
+    desfase mas chico que no use ningun vecino.
+    """
+    duenos = {}
+    for i, cable in enumerate(cables):
+        for tab, camino in cable["tramos"]:
+            for a, b in zip(camino, camino[1:]):
+                duenos.setdefault((tab, rejs[tab]._arista(a, b)), []).append(i)
+
+    vecinos = {i: set() for i in range(len(cables))}
+    for quienes in duenos.values():
+        if len(quienes) < 2:
+            continue
+        for i in quienes:
+            vecinos[i].update(q for q in quienes if q != i)
+
+    for i, cable in enumerate(cables):
+        usados = {cables[v].get("desfase", 0) for v in vecinos[i] if v < i}
+        k = 0
+        while k in usados:
+            k += 1
+        cable["desfase"] = k
+
+    # se centra con el mismo tope para todos: si se centrara por vecindario,
+    # dos cables pegados podrian caer en el mismo valor y volverse a encimar
+    tope = max((c["desfase"] for c in cables), default=0)
+    for cable in cables:
+        cable["desfase"] = (cable["desfase"] - tope / 2) * DESFASE
+
+
+def _columna_de_salto(r1, r2, cerca_de, nivel_salida, nivel_entrada):
+    """Una columna libre en los dos tableros para cruzar de uno al otro."""
+    for d in range(0, r1.columnas):
+        for col in ({cerca_de - d, cerca_de + d} if d else {cerca_de}):
+            if not 1 <= col <= r1.columnas:
+                continue
+            if r1.usado.get((col, nivel_salida)) or r2.usado.get((col, nivel_entrada)):
+                continue
+            return col
+    return cerca_de
 
 
 def _cable(rejs, nodo, color, a, b, etiqueta):
@@ -347,19 +400,22 @@ def _cable(rejs, nodo, color, a, b, etiqueta):
              "tramos": []}
     if tab1 == tab2:
         r = rejs[tab1]
-        camino = r.buscar_camino((col1, r.nivel_de[(lado1, fila1)]),
+        camino = r.camino_libre((col1, r.nivel_de[(lado1, fila1)]),
                                  (col2, r.nivel_de[(lado2, fila2)]))
         if camino:
             r.marcar_camino(camino)
             cable["tramos"] = [(tab1, camino)]
         return cable
 
-    # de un tablero a otro: cada mitad hasta el aire, y un salto derecho
+    # de un tablero a otro: cada mitad hasta el aire, y un salto derecho.
+    # La columna por donde se sale se busca libre; si todos los cables salieran
+    # por la misma, esa se congestiona y el resto acaba compartiendo tramo.
     r1, r2 = rejs[tab1], rejs[tab2]
-    salida = (col1, len(r1.niveles) - 1)
-    entrada = (col1, 0)
-    c1 = r1.buscar_camino((col1, r1.nivel_de[(lado1, fila1)]), salida)
-    c2 = r2.buscar_camino(entrada, (col2, r2.nivel_de[(lado2, fila2)]))
+    nivel_salida, nivel_entrada = len(r1.niveles) - 1, 0
+    puente = _columna_de_salto(r1, r2, col1, nivel_salida, nivel_entrada)
+    salida, entrada = (puente, nivel_salida), (puente, nivel_entrada)
+    c1 = r1.camino_libre((col1, r1.nivel_de[(lado1, fila1)]), salida)
+    c2 = r2.camino_libre(entrada, (col2, r2.nivel_de[(lado2, fila2)]))
     if c1:
         r1.marcar_camino(c1)
         cable["tramos"].append((tab1, c1))
@@ -434,6 +490,27 @@ def svg(net, tableros, ruteo, columnas=COLUMNAS, titulo=""):
     return "\n".join(s)
 
 
+def _con_desfase(puntos, d):
+    """Corre el trazo para que no quede encima de otro, sin sacar las puntas.
+
+    Se mueve todo el camino en diagonal --asi las horizontales se separan a lo
+    alto y las verticales a lo ancho, la misma cantidad-- pero los extremos se
+    dejan clavados en su agujero, y el enganche se hace con un quiebre en
+    angulo recto, nunca con una diagonal.
+    """
+    medio = [(x + d, y + d) for x, y in puntos[1:-1]]
+
+    def enganche(punta, vecino_original, vecino_movido):
+        """El punto que une la punta con el trazo corrido, en escuadra."""
+        if abs(punta[0] - vecino_original[0]) < 0.01:      # tramo vertical
+            return (punta[0], vecino_movido[1])
+        return (vecino_movido[0], punta[1])
+
+    inicio = enganche(puntos[0], puntos[1], medio[0])
+    final = enganche(puntos[-1], puntos[-2], medio[-1])
+    return [puntos[0], inicio] + medio + [final, puntos[-1]]
+
+
 def _simplifica(puntos):
     """Quita los puntos de en medio de un tramo recto."""
     if len(puntos) < 3:
@@ -450,6 +527,7 @@ def _simplifica(puntos):
 
 def _dibuja_cable(cable, rejs, y_de_tablero, x_de):
     color = cable["color"]
+    desfase = cable.get("desfase", 0)
     s = []
     for tab, camino in cable["tramos"]:
         rej = rejs[tab]
@@ -458,6 +536,8 @@ def _dibuja_cable(cable, rejs, y_de_tablero, x_de):
                   for col, niv in _simplifica(camino)]
         if len(puntos) < 2:
             continue
+        if desfase and len(puntos) > 2:
+            puntos = _con_desfase(puntos, desfase)
         d = " ".join(("M" if i == 0 else "L") + f" {x:.1f},{y:.1f}"
                      for i, (x, y) in enumerate(puntos))
         s.append(f'<path class="cable" d="{d}" fill="none" stroke="{color}" '

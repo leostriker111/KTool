@@ -71,6 +71,15 @@
   Si una columna se llena, el nodo se estira a una columna vacia. La de ruteo busca el
   camino con **A***: los cables ya puestos encarecen la celda pero no la bloquean, asi
   que rodean en vez de hacer escalerita y aprovechan el hueco libre.
+- Dos reglas mas en el ruteo: **las horizontales no corren a la altura de los pines**
+  --de lado solo por los renglones de en medio, para que un cable que va de largo no se
+  confunda con uno que se clava-- y **dos cables no comparten tramo**. Lo segundo se
+  cuenta por *arista* y no por celda: cruzarse en un punto esta bien, dos jumpers se
+  montan; correr encimados por el mismo trecho no.
+- Lo unico que queda pegado es la salida de una columna hacia el aire --un agujero solo
+  tiene dos aristas de acceso, y para salir de la fila 3 hay que pasar por la 4--, y eso
+  se dibuja con un **desfase** por coloreo de grafos: los cables que van juntos se ven
+  uno al lado del otro, no uno encima del otro.
 
 ## 0.4.0
 

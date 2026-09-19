@@ -219,12 +219,20 @@ class ElTablero(unittest.TestCase):
 class CablesPlanchados(unittest.TestCase):
     """Nada de curvas ni diagonales, y nada de jalar de la patita del chip."""
 
+    _cache = {}
+
     def _armar(self, forma="sop", salidas_color=None):
-        tabla = bcd_siete_segmentos()
-        net = netlist.construir(soluciones(tabla, forma), forma, extremos="7seg_cc")
-        tableros = tablero.colocar(net)
-        ruteo = tablero.rutear(net, tableros, salidas_color=salidas_color)
-        return net, tablero.svg(net, tableros, ruteo), ruteo, tableros
+        """Rutear el decodificador entero cuesta ~1 s; se guarda por forma."""
+        clave = (forma, salidas_color)
+        if clave not in self._cache:
+            tabla = bcd_siete_segmentos()
+            net = netlist.construir(soluciones(tabla, forma), forma,
+                                    extremos="7seg_cc")
+            tableros = tablero.colocar(net)
+            ruteo = tablero.rutear(net, tableros, salidas_color=salidas_color)
+            self._cache[clave] = (net, tablero.svg(net, tableros, ruteo),
+                                  ruteo, tableros)
+        return self._cache[clave]
 
     def test_ningun_tramo_va_en_diagonal(self):
         import re
@@ -280,6 +288,43 @@ class CablesPlanchados(unittest.TestCase):
         self.assertTrue(any(len(f) > 1 for f in porcolumna.values()),
                         "ninguna columna presto mas de un agujero")
 
+    def test_ninguna_horizontal_corre_a_la_altura_de_los_pines(self):
+        """Regla de Leonardo: de lado solo por los renglones de en medio, para
+        que un cable que va de largo no se confunda con uno que se clava."""
+        for forma in FORMAS:
+            _, _, ruteo, _ = self._armar(forma)
+            for rej in ruteo["rejillas"].values():
+                for a, b in rej.aristas:
+                    if a[1] == b[1]:            # tramo horizontal
+                        self.assertNotIn(a[1], rej.es_agujero,
+                                         f"horizontal en {rej.niveles[a[1]]}")
+
+    def test_los_cables_que_van_pegados_llevan_desfase_distinto(self):
+        """Donde no hay de otra --varios cables saliendo de la misma columna--
+        se dibujan uno al lado del otro, no uno encima del otro."""
+        for forma in FORMAS:
+            _, _, ruteo, _ = self._armar(forma)
+            porarista = {}
+            for cable in ruteo["cables"]:
+                for tab, camino in cable["tramos"]:
+                    rej = ruteo["rejillas"][tab]
+                    for a, b in zip(camino, camino[1:]):
+                        porarista.setdefault((tab, rej._arista(a, b)), []).append(cable)
+            for quienes in porarista.values():
+                if len(quienes) < 2:
+                    continue
+                desfases = [round(c.get("desfase", 0), 3) for c in quienes]
+                self.assertEqual(len(desfases), len(set(desfases)),
+                                 "dos cables pegados con el mismo desfase")
+
+    def test_el_desfase_no_mueve_las_puntas(self):
+        """El cable se separa en el camino, pero se clava en su agujero."""
+        import re
+        _, svg, ruteo, _ = self._armar()
+        self.assertTrue(re.findall(r'<path class="cable"', svg))
+        conmovimiento = [c for c in ruteo["cables"] if c.get("desfase")]
+        self.assertTrue(conmovimiento, "nadie llevo desfase")
+
     def test_el_cuerpo_de_una_pieza_no_se_atraviesa(self):
         _, _, ruteo, _ = self._armar()
         for rej in ruteo["rejillas"].values():
@@ -332,15 +377,24 @@ class LaRejilla(unittest.TestCase):
         for celda in camino:
             self.assertNotIn(celda, r.bloqueado)
 
-    def test_un_cable_ya_puesto_encarece_pero_no_prohibe(self):
+    def test_un_tramo_ya_usado_se_esquiva(self):
         r = self._rejilla()
         nivel = r.nivel_de[("abajo", 2)]
         directo = r.buscar_camino((2, nivel), (10, nivel))
-        for col in range(3, 10):
-            r.usado[(col, nivel)] = 1
+        self.assertIsNotNone(directo)
+        r.marcar_camino(directo)
         rodeo = r.buscar_camino((2, nivel), (10, nivel))
         self.assertIsNotNone(rodeo)
         self.assertNotEqual(directo, rodeo, "no busco otro camino")
+
+    def test_si_no_hay_otro_camino_lo_comparte(self):
+        r = self._rejilla()
+        nivel = r.nivel_de[("abajo", 2)]
+        directo = r.buscar_camino((2, nivel), (10, nivel))
+        r.marcar_camino(directo)
+        # cobrando el tramo en vez de cerrarlo, siempre hay respuesta
+        igual = r.buscar_camino((2, nivel), (10, nivel), evitar_usadas=False)
+        self.assertIsNotNone(igual)
 
 
 class LosColoresDicenAlgo(unittest.TestCase):

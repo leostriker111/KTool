@@ -41,10 +41,13 @@ class Rejilla:
             if n[0] == AGUJERO:
                 self.nivel_de[(n[1], n[2])] = i
 
+        self.es_agujero = {i for i, n in enumerate(self.niveles) if n[0] == AGUJERO}
+
         self.dueno = {}        # (lado, col) -> nodo que manda en esa columna
         self.ocupado = {}      # (lado, col, fila) -> quien clava ahi
         self.bloqueado = set()  # (col, nivel) por donde no se puede pasar
-        self.usado = {}        # (col, nivel) -> cuantos cables pasaron
+        self.usado = {}        # (col, nivel) -> cuantos cables cruzaron la celda
+        self.aristas = {}      # tramo (celda, celda) -> cuantos cables lo recorren
 
     # ------------------------------------------------------------ armado
 
@@ -125,28 +128,39 @@ class Rejilla:
 
     # ------------------------------------------------------------- ruteo
 
-    def buscar_camino(self, origen, destino, castigo_usado=6, castigo_vuelta=3):
+    @staticmethod
+    def _arista(a, b):
+        return (a, b) if a <= b else (b, a)
+
+    def buscar_camino(self, origen, destino, castigo_tramo=70, castigo_cruce=3,
+                      castigo_vuelta=3, evitar_usadas=True):
         """A* de un agujero a otro. Devuelve [(col, nivel), ...] o None.
 
-        Una celda por donde ya paso otro cable cuesta mas, pero no esta
-        prohibida: dos jumpers se pueden montar uno sobre otro. Lo que si esta
-        prohibido es el cuerpo de un componente.
+        Dos reglas mandan aqui:
+
+        - **Las horizontales no corren a la altura de los pines.** En un renglon
+          de agujeros solo se puede subir o bajar; para ir de lado hay que
+          pasarse a un renglon de en medio. Asi un cable que va de largo no se
+          confunde con uno que se clava.
+
+        - **Dos cables no comparten tramo.** Se cuenta por *arista* --el trecho
+          entre dos celdas-- y no por celda: cruzarse en un punto esta bien, dos
+          jumpers se montan uno sobre otro; correr encimados por el mismo trecho
+          no. La excepcion es la columna del propio agujero: un agujero solo
+          tiene dos aristas de acceso --de lado no se puede-- asi que para
+          salir hacia el aire hay que pasar por las de arriba. Eso es lo unico
+          que queda pegado, y se dibuja con un **desfase** para que se vean los
+          dos cables y no uno. Si aun asi no hay paso, se reintenta cobrando el
+          tramo caro: mejor un cable encimado que un cable que no llega.
         """
         alto = len(self.niveles)
-
-        def vecinos(celda):
-            col, niv = celda
-            for dc, dn in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                c, n = col + dc, niv + dn
-                if 1 <= c <= self.columnas and 0 <= n < alto:
-                    if (c, n) in self.bloqueado and (c, n) != destino:
-                        continue
-                    yield (c, n)
+        # en la columna del propio agujero no hay de otra: para salir de la
+        # fila 3 hacia el aire hay que pasar por la 4. Ahi se permite compartir.
+        columnas_propias = {origen[0], destino[0]}
 
         def heuristica(celda):
             return abs(celda[0] - destino[0]) + abs(celda[1] - destino[1])
 
-        inicio = (origen, None)                  # (celda, direccion de llegada)
         abierto = [(heuristica(origen), 0, origen, None)]
         visto = {(origen, None): 0}
         padre = {}
@@ -159,9 +173,21 @@ class Rejilla:
                     camino.append(clave[0])
                 camino.reverse()
                 return camino
-            for vecino in vecinos(celda):
-                nueva_dir = (vecino[0] - celda[0], vecino[1] - celda[1])
-                paso = 1 + self.usado.get(vecino, 0) * castigo_usado
+            col, niv = celda
+            for dc, dn in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                if dc and niv in self.es_agujero:
+                    continue            # de lado no, a la altura de los pines
+                vecino = (col + dc, niv + dn)
+                if not (1 <= vecino[0] <= self.columnas and 0 <= vecino[1] < alto):
+                    continue
+                if vecino in self.bloqueado and vecino != destino:
+                    continue
+                veces = self.aristas.get(self._arista(celda, vecino), 0)
+                if veces and evitar_usadas and vecino[0] not in columnas_propias:
+                    continue
+                paso = (1 + veces * castigo_tramo
+                        + self.usado.get(vecino, 0) * castigo_cruce)
+                nueva_dir = (dc, dn)
                 if direccion is not None and nueva_dir != direccion:
                     paso += castigo_vuelta
                 nuevo = costo + paso
@@ -173,6 +199,16 @@ class Rejilla:
                                              vecino, nueva_dir))
         return None
 
+    def camino_libre(self, origen, destino):
+        """Primero sin compartir un solo tramo; si no hay paso, cobrandolo."""
+        camino = self.buscar_camino(origen, destino, evitar_usadas=True)
+        if camino is None:
+            camino = self.buscar_camino(origen, destino, evitar_usadas=False)
+        return camino
+
     def marcar_camino(self, camino):
         for celda in camino:
             self.usado[celda] = self.usado.get(celda, 0) + 1
+        for a, b in zip(camino, camino[1:]):
+            arista = self._arista(a, b)
+            self.aristas[arista] = self.aristas.get(arista, 0) + 1
