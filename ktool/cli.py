@@ -73,6 +73,19 @@ def _build_parser():
     p.add_argument("--langs", help="lenguajes a incluir, separados por coma (ej: verilog,c,vhdl)")
     p.add_argument("--no-langs", action="store_true", help="no incluir el bloque de ecuaciones por lenguaje")
     p.add_argument("--to", help="traducir la expresion -e directo a un lenguaje (ej: verilog) sin minimizar")
+    # protoboard
+    p.add_argument("--proto", action="store_true",
+                   help="incluir el armado en protoboard: chips, tablero y lista de cables")
+    p.add_argument("--proto-modo", choices=["fiel", "forzado", "automatico"],
+                   default="fiel",
+                   help="como elegir los chips: fiel al diagrama, forzado a --proto-chips, "
+                        "o automatico al ancho mayor")
+    p.add_argument("--proto-chips",
+                   help="chips permitidos para --proto-modo forzado (ej: 7400,7404)")
+    p.add_argument("--proto-extremos",
+                   choices=["puntos", "led", "7seg_cc", "7seg_ca", "16seg_cc", "16seg_ca"],
+                   default="puntos",
+                   help="que se conecta en las salidas (cc = catodo comun, ca = anodo comun)")
     p.add_argument("--text", action="store_true", help="solo imprimir ecuaciones en la terminal")
     p.add_argument("--out", help="ruta del documento HTML a generar")
     p.add_argument("--open", action="store_true", help="abrir el documento en el navegador")
@@ -161,6 +174,16 @@ def main(argv=None):
             raise SystemExit(str(e))
         return
 
+    if args.proto_chips:
+        from .proto import chips as _chips
+        for nombre in args.proto_chips.replace(",", " ").split():
+            if nombre.strip() not in _chips.CHIPS:
+                raise SystemExit(
+                    f"el chip {nombre.strip()!r} no esta en el catalogo. "
+                    f"Hay: {', '.join(sorted(_chips.CHIPS))}")
+    if args.proto_modo == "forzado" and not args.proto_chips:
+        raise SystemExit("--proto-modo forzado necesita --proto-chips")
+
     try:
         table = _table_from_args(args)
     except ValueError as e:
@@ -181,6 +204,11 @@ def main(argv=None):
         table=not args.no_table,
         title=args.title,
         langs=_resolve_langs(args),
+        proto=args.proto,
+        proto_modo=args.proto_modo,
+        proto_chips=([s.strip() for s in args.proto_chips.replace(",", " ").split()]
+                     if args.proto_chips else None),
+        proto_extremos=args.proto_extremos,
     )
     html = build_report(table, opt)
     open_it = args.open or (args.out is None)

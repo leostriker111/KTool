@@ -21,6 +21,10 @@ class Options:
         shared=True,
         title="Resultados ktool",
         langs=None,         # None = todos; [] = ninguno; lista = solo esos
+        proto=False,        # incluir el armado en protoboard
+        proto_modo="fiel",  # fiel | forzado | automatico
+        proto_chips=None,   # lista de chips para el modo forzado
+        proto_extremos="puntos",   # puntos | led | 7seg_cc | 7seg_ca | 16seg_cc | 16seg_ca
     ):
         self.form = form
         self.kmap = kmap
@@ -29,6 +33,65 @@ class Options:
         self.shared = shared
         self.title = title
         self.langs = langs
+        self.proto = proto
+        self.proto_modo = proto_modo
+        self.proto_chips = proto_chips
+        self.proto_extremos = proto_extremos
+
+
+def _seccion_protoboard(table, solutions, opt):
+    """El armado fisico: chips, tablero y lista de cables."""
+    from ..proto import netlist as _net, tablero as _tab
+
+    forma = _forma_del_combinado(opt)
+    nombradas = [(n, solutions[n][forma]) for n in table.outputs]
+    partes = ["<h2>Armado en protoboard</h2>"]
+    try:
+        net = _net.construir(nombradas, forma, opt.proto_modo,
+                             opt.proto_chips, opt.proto_extremos)
+    except Exception as e:
+        return ("<h2>Armado en protoboard</h2><p class='hint'>No se pudo armar: "
+                f"{_esc(str(e))}</p>")
+
+    inventario = {}
+    for p in net["pastillas"]:
+        inventario[p["chip"]] = inventario.get(p["chip"], 0) + 1
+    total = sum(inventario.values())
+    partes.append(
+        f"<p class='hint'>Realizacion en {forma.upper()}, modo <b>{_esc(opt.proto_modo)}</b>, "
+        f"extremos <b>{_esc(opt.proto_extremos)}</b>. "
+        f"<b>{total} encapsulado(s)</b>: "
+        + ", ".join(f"{c} &times;{n}" for c, n in sorted(inventario.items())) + ".</p>")
+
+    for aviso in net["avisos"]:
+        partes.append(f"<p class='hint'><b>Aviso:</b> {_esc(aviso)}</p>")
+    if not net["completo"]:
+        partes.append("<p class='hint'><b>Ojo:</b> el circuito quedo incompleto; "
+                      "el dibujo no alcanza para armarlo.</p>")
+
+    svg, ruteo, tableros = _tab.dibujar(net, titulo="")
+    partes.append(f"<div class='protowrap'>{svg}</div>")
+
+    partes.append("<h3>Lista de cables</h3>")
+    partes.append("<p class='hint'>De aqui se arma: cada renglon es un cable. "
+                  "Los pines de VCC y GND van a los rieles, no estan en esta lista.</p>")
+    partes.append("<table class='shared'><thead><tr><th>Nodo</th><th>De</th>"
+                  "<th>A</th></tr></thead><tbody>")
+    for c in _net.lista_de_cables(net):
+        partes.append(f"<tr><td><code>{_esc(c['nodo'])}</code></td>"
+                      f"<td><code>{_esc(c['de'])}</code></td>"
+                      f"<td><code>{_esc(c['a'])}</code></td></tr>")
+    partes.append("</tbody></table>")
+    return "".join(partes)
+
+
+def _forma_del_combinado(opt):
+    """Con que realizacion se arma el circuito completo.
+
+    Tiene que ser la misma que la de los circuitos individuales: si arriba
+    dibujamos NAND y abajo SOP, el documento se contradice a si mismo.
+    """
+    return opt.form if opt.form in ("sop", "pos", "nand", "nor") else "sop"
 
 
 def _forms_to_show(opt, best):
@@ -200,9 +263,13 @@ def build_report(table, opt=None):
 
     # terminos compartidos
     if opt.shared and len(table.outputs) > 1:
-        sh = shared_terms(solutions, table.variables, "sop")
+        forma_comb = _forma_del_combinado(opt)
+        # el NAND se agrupa como el SOP y el NOR como el POS: el termino es el
+        # mismo, lo que cambia es con que compuerta se realiza
+        base_comp = "pos" if forma_comb in ("pos", "nor") else "sop"
+        sh = shared_terms(solutions, table.variables, base_comp)
         if sh:
-            body.append("<h2>Terminos reutilizables (SOP)</h2>")
+            body.append(f"<h2>Terminos reutilizables ({forma_comb.upper()})</h2>")
             body.append("<table class='shared'><thead><tr>"
                         "<th>Termino (compuerta)</th><th>Usado en</th></tr></thead><tbody>")
             for d in sh:
@@ -286,13 +353,17 @@ def build_report(table, opt=None):
         body.append("</div>")  # outcard
 
     # circuito completo combinado (SOP con compuertas compartidas)
-    if opt.circuit and any(solutions[n]["sop"].const is None for n in table.outputs):
-        named_sops = [(n, solutions[n]["sop"]) for n in table.outputs]
-        svg, gates = circuit.build_shared_circuit(named_sops)
+    if opt.proto:
+        body.append(_seccion_protoboard(table, solutions, opt))
+
+    forma_comb = _forma_del_combinado(opt)
+    if opt.circuit and any(solutions[n][forma_comb].const is None for n in table.outputs):
+        named = [(n, solutions[n][forma_comb]) for n in table.outputs]
+        svg, gates = circuit.build_shared_circuit(named, forma_comb)
         body.append("<h2>Circuito completo sugerido</h2>")
-        body.append("<p class='hint'>Realizacion en SOP de todas las salidas con las compuertas AND "
-                    "compartidas (los atajos). Para una salida donde convenga XOR o POS, revisa su "
-                    "circuito individual de arriba.</p>")
+        body.append(f"<p class='hint'>Realizacion en {forma_comb.upper()} de todas las salidas, "
+                    "con las compuertas de termino compartidas (los atajos). Para una salida donde "
+                    "convenga otra forma, revisa su circuito individual de arriba.</p>")
         if gates:
             body.append("<table class='shared'><thead><tr><th>Compuerta</th><th>Termino</th>"
                         "<th>Usada en</th></tr></thead><tbody>")

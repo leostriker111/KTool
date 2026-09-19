@@ -296,17 +296,33 @@ def circuit_svg(solution, output_name="Y"):
     return "\n".join(s)
 
 
-def build_shared_circuit(named_sops):
-    """Circuito combinado en SOP con compuertas AND compartidas entre salidas.
+_INTERNA_EXTERNA = {
+    "sop": ("and", "or"),
+    "pos": ("or", "and"),
+    "nand": ("nand", "nand"),
+    "nor": ("nor", "nor"),
+}
 
-    named_sops: lista de (nombre, Solution sop).
+
+def build_shared_circuit(named_sols, forma="sop"):
+    """Circuito combinado de todas las salidas, compartiendo las compuertas
+    de termino que se repiten.
+
+    named_sols: lista de (nombre, Solution), todas de la misma realizacion.
+    `forma` dice con que compuertas se arma: sop (AND-OR), pos (OR-AND),
+    nand o nor. Tiene que ser la MISMA que la de las soluciones, o el dibujo
+    dice una cosa y las ecuaciones otra.
+
     Devuelve (svg, gates) donde gates = [{'id','term','outputs'}].
     """
+    interna, externa = _INTERNA_EXTERNA[forma]
+    universal = forma in ("nand", "nor")
+
     rails = []
-    gate_terms = []        # {'lits','outputs'}
+    gate_terms = []        # {'lits','outputs','tipo'}
     gate_index = {}
     out_plan = []          # (name, inputs, const)
-    for name, sol in named_sops:
+    for name, sol in named_sols:
         if sol.const is not None:
             out_plan.append((name, [], sol.const))
             continue
@@ -319,17 +335,24 @@ def build_shared_circuit(named_sops):
             for lit in lits:
                 if lit not in rails:
                     rails.append(lit)
-            if len(lits) == 1:
+            # un literal suelto entra directo en SOP/POS; en NAND/NOR hay que
+            # invertirlo antes de la compuerta final, o la salida sale al reves
+            if len(lits) == 1 and not universal:
                 inputs.append(("lit", lits[0]))
-            else:
-                key = tuple(lits)
-                if key not in gate_index:
-                    gate_index[key] = len(gate_terms)
-                    gate_terms.append({"lits": list(lits), "outputs": []})
-                gi = gate_index[key]
-                if name not in gate_terms[gi]["outputs"]:
-                    gate_terms[gi]["outputs"].append(name)
-                inputs.append(("gate", gi))
+                continue
+            if len(lits) == 1 and len(terms) == 1:
+                # unico termino de un literal: las dos inversiones se cancelan
+                inputs.append(("lit", lits[0]))
+                continue
+            tipo = "not" if len(lits) == 1 else interna
+            key = (tipo, tuple(lits))
+            if key not in gate_index:
+                gate_index[key] = len(gate_terms)
+                gate_terms.append({"lits": list(lits), "outputs": [], "tipo": tipo})
+            gi = gate_index[key]
+            if name not in gate_terms[gi]["outputs"]:
+                gate_terms[gi]["outputs"].append(name)
+            inputs.append(("gate", gi))
         out_plan.append((name, inputs, None))
 
     rails.sort(key=lambda lit: (lit.rstrip("'"), lit.endswith("'")))
@@ -354,7 +377,7 @@ def build_shared_circuit(named_sops):
         if const is not None:
             slots.append({"name": name, "kind": "const", "y": oy, "h": 24, "const": const})
             oy += 42
-        elif len(inputs) == 1:
+        elif len(inputs) == 1 and (not universal or inputs[0][0] == "lit"):
             slots.append({"name": name, "kind": "direct", "y": oy, "h": 24, "inputs": inputs})
             oy += 42
         else:
@@ -426,7 +449,11 @@ def build_shared_circuit(named_sops):
 
     for gi, (gx, gy, gh) in enumerate(and_pos):
         lits = gate_terms[gi]["lits"]
-        s.append(f'<path d="{_and_path(gx, gy, gate_w, gh)}" fill="#222" stroke="#000"/>')
+        tipo = gate_terms[gi]["tipo"]
+        if tipo == "not":
+            s.append(_not_gate(gx, gy + gh / 2 - 11, 22))
+        else:
+            s.append(_gate_svg(tipo, gx, gy, gate_w, gh))
         s.append(f'<text x="{gx + 6}" y="{gy - 3}" font-size="10" fill="#555">G{gi + 1}</text>')
         n = len(lits)
         for k, lit in enumerate(lits):
@@ -469,15 +496,24 @@ def build_shared_circuit(named_sops):
             s.append(f'<text x="{x_out - 30}" y="{yy + 16}" font-size="14">{_esc(name)} = {slot["const"]}</text>')
         elif slot["kind"] == "or":
             cy = yy + h / 2
-            s.append(f'<path d="{_or_path(x_or, yy, or_gate_w, h)}" fill="#222" stroke="#000"/>')
+            s.append(_gate_svg(externa, x_or, yy, or_gate_w, h))
             s.append(f'<line x1="{x_or + or_gate_w}" y1="{cy}" x2="{x_out}" y2="{cy}" stroke="#000" stroke-width="1.5"/>')
             s.append(f'<text x="{x_out + 6}" y="{cy + 5}" font-size="15">{_esc(name)}</text>')
         else:  # direct
             s.append(f'<text x="{x_out + 6}" y="{yy + 17}" font-size="15">{_esc(name)}</text>')
 
     s.append("</svg>")
+    def _texto(g):
+        if g["tipo"] == "not":
+            return g["lits"][0] + "'"
+        cuerpo = ("".join(g["lits"]) if g["tipo"] in ("and", "nand")
+                  else " + ".join(g["lits"]))
+        if g["tipo"] in ("nand", "nor"):
+            return f"({cuerpo})'"
+        return cuerpo if g["tipo"] == "and" else f"({cuerpo})"
+
     gates = [
-        {"id": f"G{i + 1}", "term": "".join(g["lits"]), "outputs": list(g["outputs"])}
+        {"id": f"G{i + 1}", "term": _texto(g), "outputs": list(g["outputs"])}
         for i, g in enumerate(gate_terms)
     ]
     return "\n".join(s), gates

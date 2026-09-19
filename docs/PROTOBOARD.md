@@ -151,12 +151,15 @@ La función no simula, pero la herramienta sí tiene que **comprobarse a sí mis
 
 ## Orden de trabajo
 
-1. **NAND y NOR en el motor**, con su diagrama y sus switches. Independiente y útil solo.
-2. **Modelo de chips y netlist** — pinouts como datos, los tres modos de selección, los
+1. ~~**NAND y NOR en el motor**~~ — hecho.
+2. ~~**Modelo de chips y netlist**~~ — hecho: pinouts como datos, los tres modos, los
    7404, los extremos con su polaridad.
-3. **Colocación y ruteo** — colisiones, varias protoboards, puentes de rieles.
-4. **El dibujo** con relieve y colores, integrado al reporte.
-5. **GUI y CLI** — botones, switches, y elegir qué realización inspira el armado.
+3. ~~**Colocación y ruteo**~~ — hecho. No hizo falta un ruteador: cada pin se clava en su
+   propia columna y le quedan cuatro agujeros libres, así que **dos señales no pueden
+   compartir columna**. Sale de cómo está hecha la protoboard.
+4. ~~**El dibujo**~~ — hecho, con relieve, colores y la lista de cables.
+5. **GUI** — falta: los botones para elegir realización, modo y extremos. La CLI ya
+   los tiene (`--proto`, `--proto-modo`, `--proto-chips`, `--proto-extremos`).
 
 ## Abierto
 

@@ -37,6 +37,17 @@
   los 7404 de los literales negados.
 - Arreglado: `--form nand` y `--form nor` dibujaban su circuito pero el reporte nunca
   imprimia su ecuacion, asi que el diagrama no se podia leer.
+- Arreglado: el "Circuito completo sugerido" se armaba siempre en SOP aunque pidieras
+  NAND o NOR. Ahora sigue la realizacion elegida, y los terminos reutilizables tambien.
+- **Netlist** (`ktool/proto/netlist.py`): de las ecuaciones a la lista de conexiones
+  fisicas, pin por pin. Plan logico, expansion en cascada de lo que no cabe,
+  empaquetado en pastillas (U1, U2...) y nodos. Trae `comprobar()`, que evalua el
+  netlist como circuito y lo compara contra la tabla de verdad.
+- **Protoboard** (`ktool/proto/tablero.py`): colocacion por zonas --entradas a la
+  izquierda, encapsulados en medio, indicadores al final--, mas tableros cuando no
+  cabe, puentes de + y - entre ellos, y el dibujo con relieve.
+- CLI: `--proto`, `--proto-modo`, `--proto-chips` y `--proto-extremos` (puntos, led,
+  7seg_cc, 7seg_ca, 16seg_cc, 16seg_ca).
 
 ## 0.4.0
 
