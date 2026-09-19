@@ -62,8 +62,10 @@ def _build_parser():
     p.add_argument("--name", default="Y", help="nombre de la salida (default Y)")
 
     # control de salida
-    p.add_argument("--form", choices=["sop", "pos", "auto", "both"], default="auto",
-                   help="forma a mostrar (default auto = la mas barata)")
+    p.add_argument("--form", choices=["sop", "pos", "nand", "nor", "auto", "both"],
+                   default="auto",
+                   help="forma a mostrar: sop, pos, nand (solo NAND), nor (solo NOR), "
+                        "auto (la mas barata) o both")
     p.add_argument("--no-kmap", action="store_true", help="no incluir mapas de Karnaugh")
     p.add_argument("--no-circuit", action="store_true", help="no incluir circuitos")
     p.add_argument("--no-table", action="store_true", help="no incluir tabla de verdad")
@@ -71,6 +73,24 @@ def _build_parser():
     p.add_argument("--langs", help="lenguajes a incluir, separados por coma (ej: verilog,c,vhdl)")
     p.add_argument("--no-langs", action="store_true", help="no incluir el bloque de ecuaciones por lenguaje")
     p.add_argument("--to", help="traducir la expresion -e directo a un lenguaje (ej: verilog) sin minimizar")
+    # protoboard
+    p.add_argument("--proto", action="store_true",
+                   help="incluir el armado en protoboard: chips, tablero y lista de cables")
+    p.add_argument("--proto-modo", choices=["fiel", "forzado", "automatico"],
+                   default="fiel",
+                   help="como elegir los chips: fiel al diagrama, forzado a --proto-chips, "
+                        "o automatico al ancho mayor")
+    p.add_argument("--proto-chips",
+                   help="chips permitidos para --proto-modo forzado (ej: 7400,7404)")
+    p.add_argument("--proto-color-salidas", metavar="COLOR",
+                   help="color de los cables de salida: 'arcoiris' (default), un "
+                        "nombre (red, blue, ...) o un hex (#1f77b4)")
+    p.add_argument("--proto-separado", action="store_true",
+                   help="una protoboard por salida, en vez de una sola con todo")
+    p.add_argument("--proto-extremos",
+                   choices=["puntos", "led", "7seg_cc", "7seg_ca", "16seg_cc", "16seg_ca"],
+                   default="puntos",
+                   help="que se conecta en las salidas (cc = catodo comun, ca = anodo comun)")
     p.add_argument("--text", action="store_true", help="solo imprimir ecuaciones en la terminal")
     p.add_argument("--out", help="ruta del documento HTML a generar")
     p.add_argument("--open", action="store_true", help="abrir el documento en el navegador")
@@ -124,6 +144,10 @@ def _print_text(table):
         print(f"\n[{name}]")
         print(f"  SOP : {name} = {sol['sop'].equation}   ({sol['sop'].cost()[0]} comp, {sol['sop'].cost()[1]} lit)")
         print(f"  POS : {name} = {sol['pos'].equation}   ({sol['pos'].cost()[0]} comp, {sol['pos'].cost()[1]} lit)")
+        for forma in ("nand", "nor"):
+            s = sol[forma]
+            print(f"  {forma.upper():<4}: {name} = {s.equation}   "
+                  f"({s.cost()[0]} comp, {s.cost()[1]} lit)")
         print(f"  best: {sol['best'].form.upper()} -> {name} = {sol['best'].equation}")
         if sol["parity"]:
             print(f"  xor : {name} = {sol['parity']['equation']}")
@@ -155,6 +179,16 @@ def main(argv=None):
             raise SystemExit(str(e))
         return
 
+    if args.proto_chips:
+        from .proto import chips as _chips
+        for nombre in args.proto_chips.replace(",", " ").split():
+            if nombre.strip() not in _chips.CHIPS:
+                raise SystemExit(
+                    f"el chip {nombre.strip()!r} no esta en el catalogo. "
+                    f"Hay: {', '.join(sorted(_chips.CHIPS))}")
+    if args.proto_modo == "forzado" and not args.proto_chips:
+        raise SystemExit("--proto-modo forzado necesita --proto-chips")
+
     try:
         table = _table_from_args(args)
     except ValueError as e:
@@ -175,6 +209,13 @@ def main(argv=None):
         table=not args.no_table,
         title=args.title,
         langs=_resolve_langs(args),
+        proto=args.proto,
+        proto_modo=args.proto_modo,
+        proto_chips=([s.strip() for s in args.proto_chips.replace(",", " ").split()]
+                     if args.proto_chips else None),
+        proto_extremos=args.proto_extremos,
+        proto_separado=args.proto_separado,
+        proto_color_salidas=args.proto_color_salidas,
     )
     html = build_report(table, opt)
     open_it = args.open or (args.out is None)

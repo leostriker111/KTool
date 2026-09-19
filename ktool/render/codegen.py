@@ -167,6 +167,19 @@ def solution_to_ast(solution):
         body = _chain("xor", [("var", v) for v in solution.xor_vars])
         return ("not", body) if solution.xnor else body
 
+    if solution.form in ("nand", "nor"):
+        # NAND(NAND(T1), NAND(T2), ...) -> not(and(not(and(T1)), ...))
+        op = "and" if solution.form == "nand" else "or"
+        invertir = solution.form == "nor"
+        internos = []
+        for p in solution.patterns:
+            lits = [_literal(v, c) for v, c in
+                    literal_pairs(p, solution.variables, polarity_invert=invertir)]
+            internos.append(("not", _chain(op, lits)) if lits else ("const", 0))
+        if not internos:
+            return ("const", 0 if solution.form == "nand" else 1)
+        return ("not", _chain(op, internos))
+
     if solution.form == "sop":
         if not solution.patterns:
             return ("const", 0)
