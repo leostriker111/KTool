@@ -126,6 +126,32 @@ class Lenguajes(unittest.TestCase):
                          "assign Y = ~(~(B & C) & ~(A & C));")
 
 
+class ElReporteMuestraLaEcuacion(unittest.TestCase):
+    """Regresion: `--form nand` dibujaba el circuito NAND pero nunca imprimia
+    su ecuacion, asi que el diagrama no se podia leer."""
+
+    def _ecuaciones(self, forma):
+        import re
+
+        from ktool.core.table import TruthTable
+        from ktool.render.report import Options, build_report
+        tabla = TruthTable(3, outputs={"Y": [0, 0, 0, 1, 0, 1, 0, 1]})
+        html = build_report(tabla, Options(form=forma))
+        return set(re.findall(r"<b>(SOP|POS|NAND|NOR):</b>", html))
+
+    def test_form_nand_imprime_la_ecuacion_nand(self):
+        self.assertIn("NAND", self._ecuaciones("nand"))
+
+    def test_form_nor_imprime_la_ecuacion_nor(self):
+        self.assertIn("NOR", self._ecuaciones("nor"))
+
+    def test_el_reporte_normal_no_se_llena_de_formas(self):
+        salen = self._ecuaciones("auto")
+        self.assertNotIn("NAND", salen)
+        self.assertNotIn("NOR", salen)
+        self.assertEqual(salen, {"SOP", "POS"})
+
+
 class Constantes(unittest.TestCase):
     def test_funcion_constante(self):
         for valores, esperado in (([0] * 8, "0"), ([1] * 8, "1")):

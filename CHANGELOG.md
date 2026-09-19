@@ -31,6 +31,12 @@
   de hilera correcto y el relieve del plastico.
 - `herramientas/leer_pinout.py`: el lector que saco los pinouts de los datasheets,
   cruzando hasta tres lecturas independientes del mismo documento.
+- Reparto de compuertas en encapsulados (`ktool/proto/seleccion.py`): los tres modos
+  --fiel al diagrama, forzado a los chips que tengas, y automatico al ancho mayor--
+  con cascada cuando no hay encapsulado tan ancho, reuso de las compuertas libres, y
+  los 7404 de los literales negados.
+- Arreglado: `--form nand` y `--form nor` dibujaban su circuito pero el reporte nunca
+  imprimia su ecuacion, asi que el diagrama no se podia leer.
 
 ## 0.4.0
 

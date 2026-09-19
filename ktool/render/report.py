@@ -222,6 +222,8 @@ def build_report(table, opt=None):
         body.append("<div class='outcard'>")
         body.append(f"<h2>Salida <code>{_esc(name)}</code></h2>")
 
+        forms = _forms_to_show(opt, sol["best"])
+
         # ecuaciones
         body.append("<div class='eqs'>")
         body.append(
@@ -232,6 +234,16 @@ def build_report(table, opt=None):
             f"<div><b>POS:</b> <code>{_esc(name)} = {_esc(sol['pos'].equation)}</code> "
             f"<span class='cost'>({sol['pos'].cost()[0]} comp, {sol['pos'].cost()[1]} lit)</span></div>"
         )
+        # las realizaciones universales solo cuando se piden: son la forma que
+        # el usuario eligio armar, y sin su ecuacion el circuito no se puede leer
+        for universal in ("nand", "nor"):
+            if universal in forms:
+                s = sol[universal]
+                body.append(
+                    f"<div><b>{universal.upper()}:</b> <code>{_esc(name)} = "
+                    f"{_esc(s.equation)}</code> "
+                    f"<span class='cost'>({s.cost()[0]} comp, {s.cost()[1]} lit)</span></div>"
+                )
         if sol["xor"]:
             body.append(
                 f"<div class='xor'>&#8853; <b>XOR/XNOR:</b> <code>{_esc(name)} = {_esc(sol['xor'].equation)}</code> "
@@ -242,8 +254,6 @@ def build_report(table, opt=None):
             f"<code>{_esc(name)} = {_esc(sol['best'].equation)}</code></div>"
         )
         body.append("</div>")
-
-        forms = _forms_to_show(opt, sol["best"])
 
         if opt.kmap:
             body.append("<div class='maps'>")
