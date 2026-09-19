@@ -4,19 +4,23 @@ Una protoboard de 63 columnas. Cada columna son dos grupos de cinco agujeros
 conectados entre si --uno arriba del canal y otro abajo-- y los rieles de + y -
 corren a lo largo, arriba y abajo del todo.
 
-**Como se cablea.** Cada pin se clava en su columna, y esa columna tiene otros
-cuatro agujeros libres del mismo nodo: para eso esta hecha la protoboard. Un
-cable sale de uno de esos agujeros, corre en horizontal por su **carril** y sube
-o baja por la columna de destino. Puros tramos rectos, sin diagonales.
+El acomodo y el dibujo viven aqui; la matriz de la protoboard y la busqueda de
+camino viven en `rejilla.py`.
 
-**Los carriles no van sobre la cuadricula.** Cada cable tiene su propia altura,
-repartida en el espacio disponible: con N cables, el k-esimo va a (k+1)/(N+1) de
-la banda, con margen a los dos lados. Asi dos horizontales nunca quedan
-encimadas ni pegadas a la orilla. A lo alto sobra espacio --el dibujo crece--
-asi que no hay razon para que dos cables compartan altura.
+**De donde sale un cable.** Nunca de la patita del chip: de uno de los otros
+cuatro agujeros de esa misma columna, que electricamente son el mismo nodo.
+Por eso de una entrada pueden salir varios cables y no uno. Si una columna se
+llena, sirve cualquier otra que ya sea del mismo nodo, y si todas se llenan, el
+nodo se estira a una columna vacia, que da cuatro agujeros mas.
 
-Como cada pin pertenece a un solo nodo, **dos senales nunca comparten columna**:
-eso sale de como esta hecha la protoboard, ahi no hay nada que resolver.
+**Por donde va.** Lo busca un A* sobre la rejilla: las celdas por donde ya paso
+otro cable cuestan mas pero no estan prohibidas --dos jumpers se montan uno
+sobre otro-- y el cuerpo de un componente si lo esta. Por eso los cables no
+salen en escalerita y aprovechan el hueco libre. Todos los tramos son rectos.
+
+**Un cable por destino, desde la fuente.** Encadenar saldria mas corto, pero un
+cable que une las entradas de dos compuertas distintas no puede llevar un solo
+color, y el color por compuerta es justo lo que se quiere:
 
 **Los colores dicen algo.** Los cables que entran a una misma compuerta van del
 mismo color, para que se vea de un golpe que van juntos. Las salidas del
@@ -26,7 +30,7 @@ nombre o por hex.
 
 from __future__ import annotations
 
-from . import chips
+from . import chips, rejilla
 from .. import theme
 
 COLUMNAS = 63          # la protoboard comun, de 830 puntos
@@ -195,153 +199,193 @@ def _colores_por_pin(net, salidas_color=None):
 
 # ----------------------------------------------------------------- ruteo
 
-def rutear(net, tableros, columnas=COLUMNAS, salidas_color=None):
-    """Un cable por conexion, cada uno con su propio carril.
+AIRE = 7                 # renglones de rejilla por fuera del tablero, cada lado
+PASO_AIRE = PASO * 0.55
 
-    De la fuente de la senal a cada destino. El color lo pone el destino, para
-    que lo que entra a una misma compuerta se vea junto.
+
+def y_de_nivel(rej, i, y0):
+    """Altura en pixeles del renglon `i` de la rejilla."""
+    tipo, lado, k = rej.niveles[i]
+    if tipo == rejilla.CANAL:
+        return _centro(y0)
+    if tipo == rejilla.AGUJERO:
+        return _y_de(lado, k, y0)
+    if tipo == rejilla.AIRE:
+        borde = _y_de(lado, FILAS - 1, y0)
+        return borde - k * PASO_AIRE if lado == "arriba" else borde + k * PASO_AIRE
+    # renglon de en medio: entre su agujero y el siguiente hacia el canal
+    salto = PASO / 2 if k >= 1 else PASO * 0.25
+    y = _y_de(lado, k, y0)
+    return y + salto if lado == "arriba" else y - salto
+
+
+def _anclas_del_nodo(conexiones, mapa):
+    anclas = []
+    for c in conexiones:
+        punto = mapa.get((c["ref"], c["pin"]))
+        if punto is not None:
+            anclas.append((punto, c))
+    return anclas
+
+
+def rutear(net, tableros, columnas=COLUMNAS, salidas_color=None):
+    """Cablea sobre la matriz: del agujero libre mas cercano, no de la patita.
+
+    1. Se llena la matriz de pistas: de quien es cada columna y que agujero de
+       los cinco esta ocupado.
+    2. Cada nodo se recorre en cadena, de ancla en ancla. Cada extremo toma el
+       agujero libre mas cercano de su columna; si no queda ninguno, el nodo se
+       estira a una columna vacia, que da cinco agujeros mas.
+    3. El camino se busca con A* sobre la rejilla de ruteo.
     """
     mapa = mapa_de_pines(tableros)
     color_de_pin = _colores_por_pin(net, salidas_color)
 
-    tapadas = {}
+    rejs = {}
     for t in tableros:
-        ocupadas = set()
-        for p in t["piezas"]:
-            ocupadas.update(range(p["col0"], p["col0"] + p["ancho"]))
-        tapadas[t["indice"]] = ocupadas
+        r = rejilla.Rejilla(t, columnas, FILAS, AIRE)
+        for pieza in t["piezas"]:
+            r.bloquear_pieza(pieza)
+        rejs[t["indice"]] = r
 
-    cables, alimentacion, sueltos = [], [], []
+    # matriz de pistas: cada pin se clava en la fila 0 de su columna
+    nodo_de_pin = {}
+    for nodo, conexiones in net["nodos"].items():
+        for c in conexiones:
+            nodo_de_pin[(c["ref"], c["pin"])] = nodo
+    for (ref, pin), (tab, col, lado) in mapa.items():
+        rejs[tab].clavar(lado, col, 0, f"{ref}-{pin}",
+                         nodo_de_pin.get((ref, pin)))
+
+    cables, alimentacion, sueltos, avisos = [], [], [], []
+
+    def agarre(tab, lado, col, nodo, quien):
+        """Un agujero libre del nodo, empezando por la columna del pin.
+
+        Si esa se lleno, sirve cualquier otra columna que ya sea del mismo
+        nodo. Y si todas estan llenas, se estira a una columna vacia: esa pasa
+        a ser del nodo y da cuatro agujeros mas.
+        """
+        r = rejs[tab]
+        suyas = [(lado, col)] + [(l, c) for (l, c) in r.columnas_del_nodo(nodo)
+                                 if (l, c) != (lado, col)]
+        cerca = sorted(suyas, key=lambda lc: (lc[0] != lado, abs(lc[1] - col)))
+        for l, c in cerca:
+            fila = r.agujero_libre(l, c)
+            if fila is not None:
+                r.clavar(l, c, fila, quien, nodo)
+                return (tab, l, c, fila), None
+
+        # todas llenas: se estira desde la que todavia guarde su reserva
+        for l, c in cerca:
+            reserva = r.agujero_de_reserva(l, c)
+            nueva = r.columna_vacia(c, l) if reserva is not None else None
+            if nueva is None:
+                continue
+            r.clavar(l, c, reserva, f"{nodo} (estira)", nodo)
+            r.clavar(l, nueva, 1, f"{nodo} (estira)", nodo)
+            estiramiento = ((tab, l, c, reserva), (tab, l, nueva, 1))
+            fila = r.agujero_libre(l, nueva)
+            r.clavar(l, nueva, fila, quien, nodo)
+            return (tab, l, nueva, fila), estiramiento
+
+        avisos.append(f"el nodo {nodo} se quedo sin agujeros cerca de la "
+                      f"columna {col}")
+        return (tab, lado, col, max(1, r.filas - 1)), None
+
     for nodo, conexiones in sorted(net["nodos"].items()):
-        puntos = [(c, mapa.get((c["ref"], c["pin"]))) for c in conexiones]
+        anclas = _anclas_del_nodo(conexiones, mapa)
+        faltan = [c for c in conexiones if mapa.get((c["ref"], c["pin"])) is None]
+        for c in faltan:
+            sueltos.append((nodo, c["ref"], c["pin"]))
+
         if nodo in ("VCC", "GND"):
-            for c, punto in puntos:
-                if punto is None:
-                    sueltos.append((nodo, c["ref"], c["pin"]))
-                else:
-                    alimentacion.append({"nodo": nodo, "ref": c["ref"],
-                                         "pin": c["pin"], "punto": punto})
+            for (tab, col, lado), c in anclas:
+                alimentacion.append({"nodo": nodo, "ref": c["ref"], "pin": c["pin"],
+                                     "punto": (tab, col, lado),
+                                     "fila": rejs[tab].agujero_libre(lado, col) or 1})
+            continue
+        if len(anclas) < 2:
             continue
 
-        validos = [(c, p) for c, p in puntos if p is not None]
-        for c, p in puntos:
-            if p is None:
-                sueltos.append((nodo, c["ref"], c["pin"]))
-        if len(validos) < 2:
-            continue
-
-        # la fuente es el pin que maneja la senal
+        # estrella desde la fuente: un cable por destino. Encadenar saldria mas
+        # corto, pero un cable que une las entradas de DOS compuertas no puede
+        # llevar un solo color, y el color por compuerta es lo que se pidio.
         idx = 0
-        for i, (c, _) in enumerate(validos):
+        for i, (_, c) in enumerate(anclas):
             if "salida" in (c.get("papel") or ""):
                 idx = i
                 break
-        origen = validos[idx]
-        for i, destino in enumerate(validos):
-            if i == idx:
+        anclas.sort(key=lambda a: (a[0][0], a[0][2], a[0][1]))
+        fuente = next((a for a in anclas
+                       if "salida" in (a[1].get("papel") or "")), anclas[idx])
+        pf, cf = fuente
+        for punto, c in anclas:
+            if (punto, c) == fuente:
                 continue
-            color = color_de_pin.get((destino[0]["ref"], destino[0]["pin"]),
-                                     _color_de(len(cables)))
-            cables.append({"nodo": nodo, "color": color,
-                           "origen": origen[1], "destino": destino[1],
-                           "de": f"{origen[0]['ref']}-{origen[0]['pin']}",
-                           "a": f"{destino[0]['ref']}-{destino[0]['pin']}"})
+            color = (color_de_pin.get((c["ref"], c["pin"]))
+                     or color_de_pin.get((cf["ref"], cf["pin"]))
+                     or _color_de(len(cables)))
+            a1, ext1 = agarre(pf[0], pf[2], pf[1], nodo, f"{cf['ref']}-{cf['pin']}")
+            a2, ext2 = agarre(punto[0], punto[2], punto[1], nodo,
+                              f"{c['ref']}-{c['pin']}")
+            for ext in (ext1, ext2):
+                if ext:
+                    cables.append(_cable(rejs, nodo, color, ext[0], ext[1],
+                                         f"{nodo}: estira a una columna vacia"))
+            cables.append(_cable(rejs, nodo, color, a1, a2,
+                                 f"{cf['ref']}-{cf['pin']} -> {c['ref']}-{c['pin']}"))
 
-    carriles = _asignar_carriles(cables, tapadas, columnas)
     return {"cables": cables, "alimentacion": alimentacion, "mapa": mapa,
-            "sueltos": sueltos, "carriles": carriles}
+            "sueltos": sueltos, "avisos": avisos, "rejillas": rejs}
 
 
-def _zona(punto):
-    return (punto[0], punto[2])
+def _cable(rejs, nodo, color, a, b, etiqueta):
+    """Busca el camino de un agujero a otro y lo marca en la rejilla."""
+    (tab1, lado1, col1, fila1), (tab2, lado2, col2, fila2) = a, b
+    cable = {"nodo": nodo, "color": color, "a1": a, "a2": b, "etiqueta": etiqueta,
+             "tramos": []}
+    if tab1 == tab2:
+        r = rejs[tab1]
+        camino = r.buscar_camino((col1, r.nivel_de[(lado1, fila1)]),
+                                 (col2, r.nivel_de[(lado2, fila2)]))
+        if camino:
+            r.marcar_camino(camino)
+            cable["tramos"] = [(tab1, camino)]
+        return cable
 
-
-def _asignar_carriles(cables, tapadas, columnas):
-    """Cada cable, su propia altura dentro de la zona por la que corre."""
-    porzona = {}
-    for cable in cables:
-        za, zb = _zona(cable["origen"]), _zona(cable["destino"])
-        if za == zb:
-            cable["tramos"] = [(za, cable["origen"][1], cable["destino"][1])]
-        else:
-            cruce = _columna_de_cruce(cable, tapadas, columnas)
-            cable["cruce"] = cruce
-            cable["tramos"] = [(za, cable["origen"][1], cruce),
-                               (zb, cruce, cable["destino"][1])]
-        for zona, a, b in cable["tramos"]:
-            porzona.setdefault(zona, []).append(
-                {"cable": cable, "zona": zona, "min": min(a, b), "max": max(a, b)})
-
-    cuenta = {}
-    for zona, tramos in porzona.items():
-        tramos.sort(key=lambda t: (t["min"], t["max"]))
-        total = len(tramos)
-        cuenta[zona] = total
-        for k, tramo in enumerate(tramos):
-            tramo["cable"].setdefault("carril_de_zona", {})[zona] = (k, total)
-    return cuenta
-
-
-def _columna_de_cruce(cable, tapadas, columnas):
-    """Una columna libre para saltar de un lado (o tablero) al otro."""
-    tab = cable["origen"][0]
-    ocupadas = tapadas.get(tab, set())
-    for c in (cable["destino"][1], cable["origen"][1]):
-        if c not in ocupadas:
-            return c
-    cerca = cable["origen"][1]
-    for d in range(1, columnas):
-        for c in (cerca - d, cerca + d):
-            if 1 <= c <= columnas and c not in ocupadas:
-                return c
-    return cerca
+    # de un tablero a otro: cada mitad hasta el aire, y un salto derecho
+    r1, r2 = rejs[tab1], rejs[tab2]
+    salida = (col1, len(r1.niveles) - 1)
+    entrada = (col1, 0)
+    c1 = r1.buscar_camino((col1, r1.nivel_de[(lado1, fila1)]), salida)
+    c2 = r2.buscar_camino(entrada, (col2, r2.nivel_de[(lado2, fila2)]))
+    if c1:
+        r1.marcar_camino(c1)
+        cable["tramos"].append((tab1, c1))
+    if c2:
+        r2.marcar_camino(c2)
+        cable["tramos"].append((tab2, c2))
+    cable["salta"] = True
+    return cable
 
 
 # ---------------------------------------------------------------- dibujo
 
-def _banda(total):
-    """Alto que ocupan `total` carriles, con sus margenes."""
-    if total <= 0:
-        return 0.0
-    return max(FILAS_LIBRES * PASO, (total + 1) * SEPARACION_CARRIL)
-
-
-def _y_carril(lado, carril, total, y0):
-    """La altura del carril k de N: (k+1)/(N+1) de la banda, nunca a ras."""
-    d = (CANAL / 2 + PASO * 0.5 + MARGEN_CARRIL
-         + _banda(total) * (carril + 1) / (total + 1))
-    return _centro(y0) + (d if lado == "abajo" else -d)
-
-
-def _alcance(total):
-    return CANAL / 2 + PASO * 0.5 + MARGEN_CARRIL + _banda(total)
-
-
-def _margenes(ruteo, tableros):
-    """Cuanto espacio pide cada tablero por fuera, arriba y abajo."""
-    margen = {}
-    for t in tableros:
-        i = t["indice"]
-        fuera = []
-        for lado in ("arriba", "abajo"):
-            total = ruteo["carriles"].get((i, lado), 0)
-            fuera.append(max(PASO * 2.2,
-                             _alcance(total) - _DEL_CENTRO_AL_BORDE + PASO * 1.8))
-        margen[i] = tuple(fuera)
-    return margen
+def _margen_de_aire():
+    """Lo que sobresale la rejilla de ruteo por fuera del tablero."""
+    return AIRE * PASO_AIRE + PASO * 1.2
 
 
 def svg(net, tableros, ruteo, columnas=COLUMNAS, titulo=""):
     """Dibuja los tableros, sus piezas y sus cables."""
-    margen = _margenes(ruteo, tableros)
     ancho = int((columnas + 3) * PASO)
+    fuera = _margen_de_aire()
 
-    y_de_tablero, y = {}, 26
+    y_de_tablero, y = {}, 26 + fuera
     for t in tableros:
-        arriba, abajo = margen[t["indice"]]
-        y += arriba
         y_de_tablero[t["indice"]] = y
-        y += ALTO_TABLERO + abajo + 30
+        y += ALTO_TABLERO + 2 * fuera + 26
     alto = int(y + 10)
 
     s = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{ancho}" height="{alto}" '
@@ -357,20 +401,22 @@ def svg(net, tableros, ruteo, columnas=COLUMNAS, titulo=""):
     def x_de(col):
         return (col + 1) * PASO
 
-    # --- alimentacion: derecho al riel de su lado
+    # --- alimentacion: del agujero libre al riel, no de la patita
     for a in ruteo["alimentacion"]:
         tab, col, lado = a["punto"]
         y0 = y_de_tablero[tab]
-        x, y1 = x_de(col), _y_de(lado, 0, y0)
+        x = x_de(col)
+        y1 = _y_de(lado, a.get("fila", 1), y0)
         y2 = _y_riel(y0, lado, a["nodo"])
         color = "#c0392b" if a["nodo"] == "VCC" else "#2c3e50"
         s.append(f'<line x1="{x}" y1="{y1:.1f}" x2="{x}" y2="{y2:.1f}" '
                  f'stroke="{color}" stroke-width="2" opacity="0.9"/>')
+        s.append(f'<circle cx="{x}" cy="{y1:.1f}" r="2.4" fill="{color}"/>')
         s.append(f'<circle cx="{x}" cy="{y2:.1f}" r="2.5" fill="{color}"/>')
 
-    # --- los cables: tramo por tramo, todos en angulo recto
+    # --- los cables, siguiendo el camino que encontro el A*
     for cable in ruteo["cables"]:
-        s.append(_dibuja_cable(cable, y_de_tablero, x_de))
+        s.append(_dibuja_cable(cable, ruteo["rejillas"], y_de_tablero, x_de))
 
     # --- puentes de alimentacion entre tableros
     for t in tableros[:-1]:
@@ -388,42 +434,51 @@ def svg(net, tableros, ruteo, columnas=COLUMNAS, titulo=""):
     return "\n".join(s)
 
 
-def _dibuja_cable(cable, y_de_tablero, x_de):
+def _simplifica(puntos):
+    """Quita los puntos de en medio de un tramo recto."""
+    if len(puntos) < 3:
+        return puntos
+    salida = [puntos[0]]
+    for anterior, medio, siguiente in zip(puntos, puntos[1:], puntos[2:]):
+        d1 = (medio[0] - anterior[0], medio[1] - anterior[1])
+        d2 = (siguiente[0] - medio[0], siguiente[1] - medio[1])
+        if (d1[0] == 0) != (d2[0] == 0) or (d1[1] == 0) != (d2[1] == 0):
+            salida.append(medio)
+    salida.append(puntos[-1])
+    return salida
+
+
+def _dibuja_cable(cable, rejs, y_de_tablero, x_de):
     color = cable["color"]
     s = []
-    tramos = []
-    for zona, a, b in cable["tramos"]:
-        carril, total = cable["carril_de_zona"][zona]
-        tab, lado = zona
+    for tab, camino in cable["tramos"]:
+        rej = rejs[tab]
         y0 = y_de_tablero[tab]
-        tramos.append((a, b, _y_carril(lado, carril, total, y0),
-                       _y_de(lado, 0, y0)))
-
-    a1, b1, yc1, ypin1 = tramos[0]
-    s.append(_recta(x_de(a1), ypin1, x_de(a1), yc1, color))
-    s.append(f'<circle cx="{x_de(a1)}" cy="{ypin1:.1f}" r="2.3" fill="{color}"/>')
-    s.append(_recta(x_de(a1), yc1, x_de(b1), yc1, color))
-
-    if len(tramos) == 1:
-        s.append(_recta(x_de(b1), yc1, x_de(b1), ypin1, color))
-        s.append(f'<circle cx="{x_de(b1)}" cy="{ypin1:.1f}" r="2.3" fill="{color}"/>')
-    else:
-        a2, b2, yc2, ypin2 = tramos[1]
-        s.append(_recta(x_de(b1), yc1, x_de(a2), yc2, color))
-        s.append(_recta(x_de(a2), yc2, x_de(b2), yc2, color))
-        s.append(_recta(x_de(b2), yc2, x_de(b2), ypin2, color))
-        s.append(f'<circle cx="{x_de(b2)}" cy="{ypin2:.1f}" r="2.3" fill="{color}"/>')
+        puntos = [(x_de(col), y_de_nivel(rej, niv, y0))
+                  for col, niv in _simplifica(camino)]
+        if len(puntos) < 2:
+            continue
+        d = " ".join(("M" if i == 0 else "L") + f" {x:.1f},{y:.1f}"
+                     for i, (x, y) in enumerate(puntos))
+        s.append(f'<path class="cable" d="{d}" fill="none" stroke="{color}" '
+                 f'stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>')
+    # las puntas: donde se clava el cable
+    for tab, camino in cable["tramos"]:
+        rej, y0 = rejs[tab], y_de_tablero[tab]
+        for col, niv in (camino[0], camino[-1]):
+            if rej.niveles[niv][0] == rejilla.AGUJERO:
+                s.append(f'<circle cx="{x_de(col)}" '
+                         f'cy="{y_de_nivel(rej, niv, y0):.1f}" r="2.6" '
+                         f'fill="{color}"/>')
+    # salto de un tablero a otro: recto por la misma columna
+    if cable.get("salta") and len(cable["tramos"]) == 2:
+        (t1, c1), (t2, c2) = cable["tramos"]
+        x = x_de(c1[-1][0])
+        y1 = y_de_nivel(rejs[t1], c1[-1][1], y_de_tablero[t1])
+        y2 = y_de_nivel(rejs[t2], c2[0][1], y_de_tablero[t2])
+        s.append(f'<line x1="{x}" y1="{y1:.1f}" x2="{x_de(c2[0][0])}" y2="{y2:.1f}" '
+                 f'stroke="{color}" stroke-width="2"/>')
     return "".join(s)
-
-
-def _recta(x1, y1, x2, y2, color):
-    """Un tramo recto. Si los dos extremos no se alinean, se dobla en L: nunca
-    sale una diagonal."""
-    if abs(x1 - x2) < 0.01 or abs(y1 - y2) < 0.01:
-        return (f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" '
-                f'stroke="{color}" stroke-width="2" stroke-linecap="round"/>')
-    return (f'<path d="M {x1:.1f},{y1:.1f} L {x1:.1f},{y2:.1f} L {x2:.1f},{y2:.1f}" '
-            f'fill="none" stroke="{color}" stroke-width="2" stroke-linejoin="round"/>')
 
 
 def _esc_svg(txt):

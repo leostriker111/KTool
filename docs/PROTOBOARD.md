@@ -154,11 +154,14 @@ La función no simula, pero la herramienta sí tiene que **comprobarse a sí mis
 1. ~~**NAND y NOR en el motor**~~ — hecho.
 2. ~~**Modelo de chips y netlist**~~ — hecho: pinouts como datos, los tres modos, los
    7404, los extremos con su polaridad.
-3. ~~**Colocación y ruteo**~~ — hecho. Los cables van con **ángulos rectos**, por carriles
-   repartidos por intervalos (dos cables comparten carril sólo si no se traslapan), y se
-   meten en los **agujeros libres** de la columna de cada pin — que para eso son cinco del
-   mismo nodo. Y dos señales nunca comparten columna, eso sale de cómo está hecha la
-   protoboard.
+3. ~~**Colocación y ruteo**~~ — hecho, sobre **dos matrices** (`rejilla.py`):
+   - *La de pistas*: de quién es cada columna y cuál de sus cinco agujeros está ocupado.
+     Un cable nunca sale de la patita, toma un agujero libre de la misma columna. Si se
+     llena, sirve otra columna del mismo nodo; si todas se llenan, el nodo **se estira a
+     una columna vacía**, que da cuatro agujeros más.
+   - *La de ruteo*: por dónde pasa cada cable. El camino lo busca un **A\***; las celdas
+     ya usadas cuestan más pero no están prohibidas (dos jumpers se montan), y el cuerpo
+     de un componente sí lo está. Todos los tramos son rectos.
 4. ~~**El dibujo**~~ — hecho, con relieve, colores y la lista de cables.
 5. **GUI** — falta: los botones para elegir realización, modo y extremos. La CLI ya
    los tiene (`--proto`, `--proto-modo`, `--proto-chips`, `--proto-extremos`).

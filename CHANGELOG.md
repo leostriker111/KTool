@@ -65,6 +65,12 @@
 - Las resistencias, los LEDs y el display se dibujan como **componentes de verdad**,
   ocupando sus columnas, en vez de un muñon por pin. De ahi salian las "salidas de mas"
   y la protoboard vacia: ya no se abre un tablero que no lleve piezas.
+- La protoboard como **dos matrices** (`ktool/proto/rejilla.py`). La de pistas dice de
+  quien es cada columna y que agujero esta ocupado: un cable ya no sale de la patita del
+  chip sino del agujero libre mas cercano, y de una entrada pueden salir varios cables.
+  Si una columna se llena, el nodo se estira a una columna vacia. La de ruteo busca el
+  camino con **A***: los cables ya puestos encarecen la celda pero no la bloquean, asi
+  que rodean en vez de hacer escalerita y aprovechan el hueco libre.
 
 ## 0.4.0
 

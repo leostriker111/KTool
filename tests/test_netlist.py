@@ -12,7 +12,7 @@ import xml.etree.ElementTree as ET
 
 from ktool.core.simplify import solve_output
 from ktool.core.table import TruthTable
-from ktool.proto import chips, netlist, seleccion, tablero
+from ktool.proto import chips, netlist, rejilla, seleccion, tablero
 
 FORMAS = ("sop", "pos", "nand", "nor")
 CAJON = ["7400", "7402", "7404", "7408", "7432"]
@@ -217,76 +217,130 @@ class ElTablero(unittest.TestCase):
 
 
 class CablesPlanchados(unittest.TestCase):
-    """Nada de curvas ni diagonales: puros tramos rectos, como se cablea."""
+    """Nada de curvas ni diagonales, y nada de jalar de la patita del chip."""
 
-    def _svg_de(self, forma="sop"):
+    def _armar(self, forma="sop", salidas_color=None):
         tabla = bcd_siete_segmentos()
         net = netlist.construir(soluciones(tabla, forma), forma, extremos="7seg_cc")
-        svg, ruteo, tableros = tablero.dibujar(net)
-        return svg, ruteo, tableros
+        tableros = tablero.colocar(net)
+        ruteo = tablero.rutear(net, tableros, salidas_color=salidas_color)
+        return net, tablero.svg(net, tableros, ruteo), ruteo, tableros
 
-    def test_ninguna_linea_va_en_diagonal(self):
+    def test_ningun_tramo_va_en_diagonal(self):
         import re
-        svg, _, _ = self._svg_de()
-        patron = r'<line x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)" y2="([-\d.]+)"'
-        for x1, y1, x2, y2 in re.findall(patron, svg):
-            recta = abs(float(x1) - float(x2)) < 0.01 or abs(float(y1) - float(y2)) < 0.01
-            self.assertTrue(recta, f"linea en diagonal: {x1},{y1} -> {x2},{y2}")
-
-    def test_los_puentes_tambien_son_de_angulo_recto(self):
-        import re
-        svg, _, _ = self._svg_de()
-        for d in re.findall(r'<path d="(M [^"]*L[^"]*)"', svg):
-            puntos = re.findall(r'([-\d.]+),([-\d.]+)', d)
+        _, svg, _, _ = self._armar()
+        caminos = re.findall(r'<path class="cable" d="(M [^"]*)"', svg)
+        self.assertTrue(caminos, "no se dibujo ningun cable")
+        for d in caminos:
+            puntos = re.findall(r"([-\d.]+),([-\d.]+)", d)
             for (x1, y1), (x2, y2) in zip(puntos, puntos[1:]):
-                recta = (abs(float(x1) - float(x2)) < 0.01
+                recto = (abs(float(x1) - float(x2)) < 0.01
                          or abs(float(y1) - float(y2)) < 0.01)
-                self.assertTrue(recta, f"tramo en diagonal en {d}")
+                self.assertTrue(recto, f"tramo en diagonal: {d[:90]}")
 
     def test_no_quedan_curvas(self):
-        svg, _, _ = self._svg_de()
+        _, svg, _, _ = self._armar()
         self.assertNotIn(" Q ", svg, "quedo una curva de Bezier")
         self.assertNotIn(" C ", svg)
 
-    def test_cada_cable_tiene_su_propia_altura(self):
-        """Lo que pidio Leonardo: nada de apilar cables en el mismo renglon.
-        Con N cables en una zona, el k-esimo va a (k+1)/(N+1) de la banda."""
+    def test_ningun_cable_sale_de_la_patita(self):
+        """La fila 0 es del pin. El cable toma un agujero libre de la misma
+        columna, que electricamente es lo mismo."""
         for forma in FORMAS:
-            _, ruteo, _ = self._svg_de(forma)
+            _, _, ruteo, _ = self._armar(forma)
+            for cable in ruteo["cables"]:
+                for extremo in (cable["a1"], cable["a2"]):
+                    self.assertGreaterEqual(
+                        extremo[3], 1, f"{cable['etiqueta']} sale de la patita")
+
+    def test_todos_los_cables_encuentran_camino(self):
+        for forma in FORMAS:
+            _, _, ruteo, _ = self._armar(forma)
+            for cable in ruteo["cables"]:
+                self.assertTrue(cable["tramos"], f"sin camino: {cable['etiqueta']}")
+
+    def test_dos_cables_no_se_clavan_en_el_mismo_agujero(self):
+        for forma in FORMAS:
+            _, _, ruteo, _ = self._armar(forma)
             usados = {}
             for cable in ruteo["cables"]:
-                for zona, (carril, total) in cable["carril_de_zona"].items():
-                    self.assertNotIn((zona, carril), usados,
-                                     f"{cable['nodo']} comparte carril con "
-                                     f"{usados.get((zona, carril))}")
-                    usados[(zona, carril)] = cable["nodo"]
-                    self.assertLess(carril, total)
+                for extremo in (cable["a1"], cable["a2"]):
+                    previo = usados.get(extremo)
+                    if previo is not None and previo != cable["nodo"]:
+                        self.fail(f"{extremo}: lo usan {previo} y {cable['nodo']}")
+                    usados[extremo] = cable["nodo"]
 
-    def test_los_carriles_no_quedan_a_ras(self):
-        """Con margen a los dos lados: ni pegado al pin ni pegado a la orilla."""
-        for total in (1, 3, 8, 40):
-            alturas = [tablero._y_carril("abajo", k, total, 0) for k in range(total)]
-            self.assertEqual(len(set(alturas)), total, "hay dos carriles iguales")
-            self.assertEqual(alturas, sorted(alturas))
-            primero = alturas[0] - tablero._y_de("abajo", 0, 0)
-            self.assertGreater(primero, 1.0, "el primer carril quedo sobre el pin")
+    def test_de_una_columna_pueden_salir_varios_cables(self):
+        """Una columna tiene cuatro agujeros libres: hay que aprovecharlos."""
+        _, _, ruteo, _ = self._armar()
+        porcolumna = {}
+        for cable in ruteo["cables"]:
+            for (tab, lado, col, fila) in (cable["a1"], cable["a2"]):
+                porcolumna.setdefault((tab, lado, col), set()).add(fila)
+        self.assertTrue(any(len(f) > 1 for f in porcolumna.values()),
+                        "ninguna columna presto mas de un agujero")
 
-    def test_la_separacion_entre_carriles_no_se_aplasta(self):
-        for total in (2, 10, 60):
-            alturas = [tablero._y_carril("abajo", k, total, 0) for k in range(total)]
-            huecos = [b - a for a, b in zip(alturas, alturas[1:])]
-            self.assertGreaterEqual(min(huecos), 4.0,
-                                    f"con {total} cables quedaron encimados")
+    def test_el_cuerpo_de_una_pieza_no_se_atraviesa(self):
+        _, _, ruteo, _ = self._armar()
+        for rej in ruteo["rejillas"].values():
+            for celda in rej.usado:
+                self.assertNotIn(celda, rej.bloqueado,
+                                 f"un cable paso por {celda}, que esta bloqueado")
 
-    def test_se_usan_los_agujeros_libres_de_la_columna(self):
-        """Una columna son cinco agujeros del mismo nodo: hay que usarlos."""
-        _, ruteo, _ = self._svg_de()
-        self.assertTrue(ruteo["cables"])
-        # los primeros carriles caen dentro de las filas libres del tablero
-        dentro = [c for c in ruteo["cables"]
-                  if any(k < tablero.FILAS_LIBRES
-                         for k, _ in c["carril_de_zona"].values())]
-        self.assertTrue(dentro, "ningun cable se metio en las filas libres")
+
+class LaRejilla(unittest.TestCase):
+    """La matriz: de quien es cada columna y por donde se puede pasar."""
+
+    def _rejilla(self):
+        return rejilla.Rejilla({"indice": 0, "piezas": []}, 20, filas=5, aire=4)
+
+    def test_los_renglones_alternan_agujero_y_medio(self):
+        r = self._rejilla()
+        tipos = [n[0] for n in r.niveles]
+        self.assertIn(rejilla.CANAL, tipos)
+        self.assertEqual(tipos.count(rejilla.AGUJERO), 10)
+
+    def test_el_agujero_libre_es_el_mas_cercano_y_nunca_el_del_pin(self):
+        r = self._rejilla()
+        r.clavar("abajo", 3, 0, "U1-1", "G1")
+        self.assertEqual(r.agujero_libre("abajo", 3), 1)
+        r.clavar("abajo", 3, 1, "cable", "G1")
+        self.assertEqual(r.agujero_libre("abajo", 3), 2)
+
+    def test_cuando_se_acaban_los_agujeros_avisa(self):
+        r = self._rejilla()
+        for fila in range(5):
+            r.clavar("abajo", 3, fila, "algo", "G1")
+        self.assertIsNone(r.agujero_libre("abajo", 3))
+
+    def test_una_columna_vacia_es_la_salida(self):
+        """Estirar el nodo a una columna sin dueno da cinco agujeros mas."""
+        r = self._rejilla()
+        r.clavar("abajo", 3, 0, "U1-1", "G1")
+        vacia = r.columna_vacia(3, "abajo")
+        self.assertIsNotNone(vacia)
+        self.assertNotEqual(vacia, 3)
+        self.assertEqual(r.agujero_libre("abajo", vacia), 1)
+
+    def test_el_camino_rodea_lo_bloqueado(self):
+        r = self._rejilla()
+        nivel = r.nivel_de[("abajo", 2)]
+        for col in range(4, 9):
+            r.bloqueado.add((col, nivel))
+        camino = r.buscar_camino((2, nivel), (12, nivel))
+        self.assertIsNotNone(camino)
+        for celda in camino:
+            self.assertNotIn(celda, r.bloqueado)
+
+    def test_un_cable_ya_puesto_encarece_pero_no_prohibe(self):
+        r = self._rejilla()
+        nivel = r.nivel_de[("abajo", 2)]
+        directo = r.buscar_camino((2, nivel), (10, nivel))
+        for col in range(3, 10):
+            r.usado[(col, nivel)] = 1
+        rodeo = r.buscar_camino((2, nivel), (10, nivel))
+        self.assertIsNotNone(rodeo)
+        self.assertNotEqual(directo, rodeo, "no busco otro camino")
 
 
 class LosColoresDicenAlgo(unittest.TestCase):
@@ -296,30 +350,26 @@ class LosColoresDicenAlgo(unittest.TestCase):
         tableros = tablero.colocar(net)
         ruteo = tablero.rutear(net, tableros)
         chip_de = {p["ref"]: p["chip"] for p in net["pastillas"]}
-        por_compuerta = {}
         for g in net["plan"].compuertas:
             if g.chip is None:
                 continue
             hueco = chips.compuertas(chip_de[g.chip])[g.hueco]
-            entradas = {(g.chip, pin) for pin in hueco["entradas"]}
+            entradas = {f"{g.chip}-{pin}" for pin in hueco["entradas"]}
+            # ojo: comparar exacto, que "U2-1" es subcadena de "U2-13"
             colores = {c["color"] for c in ruteo["cables"]
-                       if (c["a"].rsplit("-", 1)[0],
-                           int(c["a"].rsplit("-", 1)[1])) in entradas}
-            if colores:
-                por_compuerta[g.id] = colores
-        for gid, colores in por_compuerta.items():
-            self.assertEqual(len(colores), 1,
-                             f"la compuerta {gid} recibe cables de {len(colores)} colores")
+                       if c["etiqueta"].split(" -> ")[-1] in entradas}
+            self.assertLessEqual(len(colores), 1,
+                                 f"la compuerta {g.id} recibe {len(colores)} colores")
 
     def test_el_color_de_salida_se_puede_fijar(self):
         tabla = TruthTable(2, outputs={"Y": [0, 1, 1, 0]})
         net = netlist.construir(soluciones(tabla, "sop"), "sop", extremos="led")
         tableros = tablero.colocar(net)
         ruteo = tablero.rutear(net, tableros, salidas_color="#0b6e4f")
-        hacia_salida = [c for c in ruteo["cables"]
-                        if c["a"].startswith("R") or c["a"].startswith("D")]
-        self.assertTrue(hacia_salida)
-        for c in hacia_salida:
+        hacia = [c for c in ruteo["cables"]
+                 if "R1-" in c["etiqueta"] or "D1-" in c["etiqueta"]]
+        self.assertTrue(hacia)
+        for c in hacia:
             self.assertEqual(c["color"], "#0b6e4f")
 
     def test_acepta_nombre_y_hex_con_o_sin_gato(self):
