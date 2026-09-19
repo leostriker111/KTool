@@ -216,6 +216,76 @@ class ElTablero(unittest.TestCase):
                          tablero.posicion_del_pin(14, 14, 5)[0])
 
 
+class CablesPlanchados(unittest.TestCase):
+    """Nada de curvas ni diagonales: puros tramos rectos, como se cablea."""
+
+    def _svg_de(self, forma="sop"):
+        tabla = bcd_siete_segmentos()
+        net = netlist.construir(soluciones(tabla, forma), forma, extremos="7seg_cc")
+        svg, ruteo, tableros = tablero.dibujar(net)
+        return svg, ruteo, tableros
+
+    def test_ninguna_linea_va_en_diagonal(self):
+        import re
+        svg, _, _ = self._svg_de()
+        patron = r'<line x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)" y2="([-\d.]+)"'
+        for x1, y1, x2, y2 in re.findall(patron, svg):
+            recta = abs(float(x1) - float(x2)) < 0.01 or abs(float(y1) - float(y2)) < 0.01
+            self.assertTrue(recta, f"linea en diagonal: {x1},{y1} -> {x2},{y2}")
+
+    def test_los_puentes_tambien_son_de_angulo_recto(self):
+        import re
+        svg, _, _ = self._svg_de()
+        for d in re.findall(r'<path d="(M [^"]*L[^"]*)"', svg):
+            puntos = re.findall(r'([-\d.]+),([-\d.]+)', d)
+            for (x1, y1), (x2, y2) in zip(puntos, puntos[1:]):
+                recta = (abs(float(x1) - float(x2)) < 0.01
+                         or abs(float(y1) - float(y2)) < 0.01)
+                self.assertTrue(recta, f"tramo en diagonal en {d}")
+
+    def test_no_quedan_curvas(self):
+        svg, _, _ = self._svg_de()
+        self.assertNotIn(" Q ", svg, "quedo una curva de Bezier")
+        self.assertNotIn(" C ", svg)
+
+    def test_dos_cables_del_mismo_carril_no_se_traslapan(self):
+        """Es lo que evita que un cable se cruce con otro yendo en paralelo."""
+        for forma in FORMAS:
+            _, ruteo, _ = self._svg_de(forma)
+            por_carril = {}
+            for tr in ruteo["troncos"]:
+                clave = (tr["tablero"], tr["lado"], tr["carril"])
+                for otro in por_carril.get(clave, []):
+                    se_pisan = not (tr["col_max"] < otro["col_min"]
+                                    or tr["col_min"] > otro["col_max"])
+                    self.assertFalse(se_pisan,
+                                     f"{tr['nodo']} y {otro['nodo']} comparten carril")
+                por_carril.setdefault(clave, []).append(tr)
+
+    def test_se_usan_los_agujeros_libres_de_la_columna(self):
+        """Una columna son cinco agujeros del mismo nodo: hay que usarlos."""
+        _, ruteo, _ = self._svg_de()
+        dentro = [tr for tr in ruteo["troncos"]
+                  if tr["carril"] < tablero.FILAS_LIBRES]
+        self.assertTrue(dentro, "ningun cable se metio en las filas libres")
+        # y los primeros carriles son justamente esas filas
+        self.assertEqual(tablero.FILAS_LIBRES, 4)
+
+
+class UnaProtoPorSalida(unittest.TestCase):
+    def test_cada_salida_arma_su_propio_tablero(self):
+        tabla = bcd_siete_segmentos()
+        total = 0
+        for nombre, valores in tabla.outputs.items():
+            una = TruthTable(4, outputs={nombre: valores})
+            net = netlist.construir(soluciones(una, "sop"), "sop", extremos="led")
+            self.assertEqual(netlist.comprobar(net, una), [], nombre)
+            total += len(net["pastillas"])
+        junto = netlist.construir(soluciones(tabla, "sop"), "sop", extremos="led")
+        # por separado sale mas material: no se comparten compuertas
+        self.assertGreater(total, len(junto["pastillas"]))
+
+
 class LaListaDeCables(unittest.TestCase):
     def test_hay_un_cable_por_cada_union(self):
         tabla = bcd_siete_segmentos()

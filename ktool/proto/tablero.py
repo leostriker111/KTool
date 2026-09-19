@@ -4,12 +4,20 @@ Una protoboard de 63 columnas. Cada columna son dos grupos de cinco agujeros
 conectados entre si --uno arriba del canal y otro abajo-- y los rieles de + y -
 corren a lo largo, arriba y abajo del todo.
 
-**Por que no hace falta un ruteador.** Cada pin de un chip se clava en su propia
-columna, y esa columna tiene otros cuatro agujeros libres. Un cable de ese pin a
-otro sale de uno de esos agujeros libres. Como cada pin pertenece a un solo nodo,
-**dos senales nunca pueden compartir columna**: no hay colision que resolver, sale
-de como esta hecha la protoboard. Lo unico que hay que repartir bien son las
-pastillas, para que quepan y no se encimen.
+**Como se cablea.** Cada pin de un chip se clava en su propia columna, y esa
+columna tiene otros cuatro agujeros libres del mismo nodo -- para eso esta hecha
+la protoboard. Asi que un cable sale de uno de esos agujeros libres, corre en
+horizontal por un **carril** y sube o baja por la columna de destino: puros
+tramos rectos, nada de diagonales ni curvas.
+
+Los carriles se reparten por intervalos: dos cables van por el mismo carril solo
+si sus columnas no se traslapan. Eso es lo que evita que dos cables se crucen
+yendo en paralelo. Cuando se acaban las cuatro filas libres, los carriles
+siguientes corren por fuera del tablero, que es lo que pasa de verdad cuando
+apilas jumpers.
+
+Como cada pin pertenece a un solo nodo, **dos senales nunca comparten columna**:
+eso sale de como esta hecha la protoboard, no hay nada que resolver ahi.
 
 Cuando ya no caben, se agrega otro tablero y se dibujan los puentes de + y -
 entre los rieles de los dos, que es lo que de verdad haces en la mesa.
@@ -118,23 +126,43 @@ def _columnas_libres(tableros, mapa, columnas=COLUMNAS):
     return libres
 
 
-def rutear(net, tableros, columnas=COLUMNAS):
-    """Los cables: de que agujero a que agujero.
+def _asigna_carriles(troncos):
+    """Reparte los tramos horizontales en carriles que no se pisen.
 
-    Cada nodo se recorre en cadena. Los componentes que no son pastillas
-    (entradas, LEDs, displays) se clavan en columnas libres.
+    Dos cables pueden ir por el mismo carril si sus columnas no se traslapan.
+    Es el mismo reparto por intervalos que ya usa el circuito combinado, y es
+    lo que evita que un cable se cruce con otro yendo en paralelo.
+    """
+    carriles = []
+    for tronco in sorted(troncos, key=lambda x: (x["col_min"], -x["col_max"])):
+        for i, ocupado in enumerate(carriles):
+            if all(tronco["col_max"] < a - 1 or tronco["col_min"] > b + 1
+                   for a, b in ocupado):
+                ocupado.append((tronco["col_min"], tronco["col_max"]))
+                tronco["carril"] = i
+                break
+        else:
+            carriles.append([(tronco["col_min"], tronco["col_max"])])
+            tronco["carril"] = len(carriles) - 1
+    return len(carriles)
+
+
+def rutear(net, tableros, columnas=COLUMNAS):
+    """Los cables, con angulos rectos y por carriles.
+
+    Cada cable baja (o sube) por la **columna de su pin**, se mete en uno de los
+    agujeros libres de esa misma columna --que son del mismo nodo, para eso
+    esta la protoboard-- y corre en horizontal por un carril hasta la columna
+    de destino. Nada de curvas: puros tramos rectos.
     """
     mapa = mapa_de_pines(tableros)
 
     def huecos_de(clave):
-        """Las columnas reservadas de una zona, tablero por tablero."""
         for t in tableros:
             for col in t[clave]:
                 yield t["indice"], col
 
-    zona_e = huecos_de("zona_entradas")
-    zona_s = huecos_de("zona_salidas")
-
+    zona_e, zona_s = huecos_de("zona_entradas"), huecos_de("zona_salidas")
     por_ref = {c["ref"]: c for c in net["componentes"]}
     sueltos = []
     for c in net["componentes"]:
@@ -149,30 +177,73 @@ def rutear(net, tableros, columnas=COLUMNAS):
             tab, col = sitio
             mapa[(c["ref"], pin)] = (tab, col, "abajo" if pin % 2 else "arriba")
 
-    cables, alimentacion = [], []
+    # columnas tapadas por una pastilla: por ahi no conviene cruzar
+    tapadas = {}
+    for t in tableros:
+        ocupadas = set()
+        for p in t["pastillas"]:
+            ocupadas.update(range(p["col0"], p["col0"] + columnas_de(p["pines"])))
+        tapadas[t["indice"]] = ocupadas
+
+    alimentacion, troncos, puentes = [], [], []
     for i, (nodo, conexiones) in enumerate(sorted(net["nodos"].items())):
-        puntos = [mapa.get((c["ref"], c["pin"])) for c in conexiones]
+        puntos = [(c, mapa.get((c["ref"], c["pin"]))) for c in conexiones]
         if nodo in ("VCC", "GND"):
-            for c, punto in zip(conexiones, puntos):
+            for c, punto in puntos:
                 if punto is None:
                     sueltos.append((nodo, c["ref"], c["pin"]))
-                    continue
-                alimentacion.append({"nodo": nodo, "ref": c["ref"], "pin": c["pin"],
-                                     "punto": punto})
+                else:
+                    alimentacion.append({"nodo": nodo, "ref": c["ref"],
+                                         "pin": c["pin"], "punto": punto})
             continue
+
         color = theme.WIRE_COLORS[i % len(theme.WIRE_COLORS)]
-        validos = [(c, p) for c, p in zip(conexiones, puntos) if p is not None]
-        for (c, p) in zip(conexiones, puntos):
-            if p is None:
+        grupos = {}
+        for c, punto in puntos:
+            if punto is None:
                 sueltos.append((nodo, c["ref"], c["pin"]))
-        for (c1, p1), (c2, p2) in zip(validos, validos[1:]):
-            cables.append({
-                "nodo": nodo, "color": color,
-                "de": {"ref": c1["ref"], "pin": c1["pin"], "punto": p1},
-                "a": {"ref": c2["ref"], "pin": c2["pin"], "punto": p2},
-            })
-    return {"cables": cables, "alimentacion": alimentacion,
-            "mapa": mapa, "sueltos": sueltos, "por_ref": por_ref}
+                continue
+            tab, col, lado = punto
+            grupos.setdefault((tab, lado), []).append((col, c))
+
+        mios = []
+        for (tab, lado), items in sorted(grupos.items()):
+            cols = sorted(c for c, _ in items)
+            tronco = {"nodo": nodo, "color": color, "tablero": tab, "lado": lado,
+                      "col_min": cols[0], "col_max": cols[-1], "columnas": cols,
+                      "carril": 0}
+            troncos.append(tronco)
+            mios.append(tronco)
+
+        # un nodo repartido en varios grupos se une con un puente
+        for a, b in zip(mios, mios[1:]):
+            columna = _columna_de_puente(a, b, tapadas, columnas)
+            puentes.append({"nodo": nodo, "color": color, "de": a, "a": b,
+                            "columna": columna})
+
+    # los carriles se reparten por zona: cada lado de cada tablero es un canal
+    zonas = {}
+    for tronco in troncos:
+        zonas.setdefault((tronco["tablero"], tronco["lado"]), []).append(tronco)
+    carriles_por_zona = {z: _asigna_carriles(ts) for z, ts in zonas.items()}
+
+    return {"troncos": troncos, "puentes": puentes, "alimentacion": alimentacion,
+            "mapa": mapa, "sueltos": sueltos, "por_ref": por_ref,
+            "carriles": carriles_por_zona}
+
+
+def _columna_de_puente(a, b, tapadas, columnas):
+    """Una columna libre para cruzar de un lado (o tablero) al otro."""
+    candidatas = sorted(set(a["columnas"]) | set(b["columnas"]))
+    libres = [c for c in candidatas if c not in tapadas.get(a["tablero"], set())]
+    if libres:
+        return libres[0]
+    cerca = min(candidatas) if candidatas else 1
+    for d in range(columnas):
+        for c in (cerca - d, cerca + d):
+            if 1 <= c <= columnas and c not in tapadas.get(a["tablero"], set()):
+                return c
+    return cerca
 
 
 # ------------------------------------------------------------------ dibujo
@@ -180,6 +251,7 @@ def rutear(net, tableros, columnas=COLUMNAS):
 PASO = 15            # pixeles por columna (el paso real es 2.54 mm)
 CANAL = PASO * 2     # el hueco del centro, por donde queda a caballo el chip
 FILAS = 5            # agujeros por grupo, arriba y abajo
+FILAS_LIBRES = FILAS - 1   # la fila 0 la ocupa el pin; las otras 4 son para cables
 
 # De adentro hacia afuera: canal, cinco filas de agujeros, el riel de - y el de +.
 _DEL_CENTRO_AL_BORDE = CANAL / 2 + PASO * 0.5 + (FILAS - 1) * PASO
@@ -208,78 +280,137 @@ def _alto_tablero():
     return ALTO_TABLERO
 
 
+def _y_carril(lado, carril, y0):
+    """Altura de un carril. Los primeros son filas libres de la protoboard;
+    si se acaban, los demas corren por fuera del tablero."""
+    if carril < FILAS_LIBRES:
+        return _y_de(lado, carril + 1, y0)
+    fuera = carril - FILAS_LIBRES
+    d = _DEL_CENTRO_AL_BORDE + PASO * 2.9 + fuera * PASO * 0.62
+    return _centro(y0) + (d if lado == "abajo" else -d)
+
+
+def _carriles_fuera(ruteo, tablero_idx, lado):
+    n = ruteo["carriles"].get((tablero_idx, lado), 0)
+    return max(0, n - FILAS_LIBRES)
+
+
+def _margenes(ruteo, tableros):
+    """Cuanto espacio pide cada tablero arriba y abajo por los cables de fuera."""
+    margen = {}
+    for t in tableros:
+        i = t["indice"]
+        margen[i] = (
+            PASO * 3.4 + _carriles_fuera(ruteo, i, "arriba") * PASO * 0.62,
+            PASO * 3.4 + _carriles_fuera(ruteo, i, "abajo") * PASO * 0.62,
+        )
+    return margen
+
+
 def svg(net, tableros, ruteo, columnas=COLUMNAS, titulo=""):
-    """Dibuja los tableros con sus pastillas y sus cables."""
+    """Dibuja los tableros, sus pastillas y sus cables.
+
+    Los cables van con angulos rectos: bajan por la columna de su pin, se meten
+    en un agujero libre de esa misma columna, corren por su carril y suben por
+    la columna de destino.
+    """
+    margen = _margenes(ruteo, tableros)
     ancho = int((columnas + 3) * PASO)
-    alto_t = _alto_tablero()
-    alto = alto_t * len(tableros) + 40 * len(tableros) + 30
+    alto_t = ALTO_TABLERO
+
+    y_de_tablero, y = {}, 26
+    for t in tableros:
+        arriba, abajo = margen[t["indice"]]
+        y += arriba
+        y_de_tablero[t["indice"]] = y
+        y += alto_t + abajo + 26
+    alto = int(y + 10)
+
     s = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{ancho}" height="{alto}" '
          f'font-family="Georgia, serif">',
          f'<rect width="100%" height="100%" fill="#faf8f4"/>']
 
-    y_de_tablero = {}
     for t in tableros:
-        y0 = 24 + t["indice"] * (alto_t + 40)
-        y_de_tablero[t["indice"]] = y0
-        s.append(_tablero_vacio(y0, columnas, t["indice"], len(tableros)))
-
-    def punto_xy(punto, fila=0):
-        tab, col, lado = punto
-        return (col + 1) * PASO, _y_de(lado, fila, y_de_tablero[tab])
-
-    # las pastillas
-    for t in tableros:
-        y0 = y_de_tablero[t["indice"]]
+        s.append(_tablero_vacio(y_de_tablero[t["indice"]], columnas,
+                                t["indice"], len(tableros)))
         for p in t["pastillas"]:
-            s.append(_pastilla(p, y0))
+            s.append(_pastilla(p, y_de_tablero[t["indice"]]))
 
-    # la alimentacion: cada pin a su riel, por el camino corto
+    def x_de(col):
+        return (col + 1) * PASO
+
+    # --- alimentacion: derecho al riel de su lado, sin rodeos
     for a in ruteo["alimentacion"]:
         tab, col, lado = a["punto"]
         y0 = y_de_tablero[tab]
-        x = (col + 1) * PASO
-        y = _y_de(lado, 0, y0)
-        riel = _y_riel(y0, lado, a["nodo"])
-        color = "#d62728" if a["nodo"] == "VCC" else "#222"
-        s.append(f'<path d="M {x},{y} L {x},{riel}" stroke="{color}" '
-                 f'stroke-width="2" fill="none" opacity="0.85"/>')
-        s.append(f'<circle cx="{x}" cy="{riel}" r="2.6" fill="{color}"/>')
+        x, y1 = x_de(col), _y_de(lado, 0, y0)
+        y2 = _y_riel(y0, lado, a["nodo"])
+        color = "#c0392b" if a["nodo"] == "VCC" else "#2c3e50"
+        s.append(f'<line x1="{x}" y1="{y1:.1f}" x2="{x}" y2="{y2:.1f}" '
+                 f'stroke="{color}" stroke-width="2" opacity="0.9"/>')
+        s.append(f'<circle cx="{x}" cy="{y2:.1f}" r="2.5" fill="{color}"/>')
+        s.append(f'<circle cx="{x}" cy="{y1:.1f}" r="2.2" fill="{color}"/>')
 
-    # los cables de senal, con una curva suave para que se sigan con la vista
-    for c in ruteo["cables"]:
-        x1, y1 = punto_xy(c["de"]["punto"], 1)
-        x2, y2 = punto_xy(c["a"]["punto"], 1)
-        if c["de"]["punto"][0] != c["a"]["punto"][0]:
-            # cable de un tablero a otro: recto, que se vea que cruza
-            s.append(f'<path d="M {x1},{y1} L {x2},{y2}" fill="none" '
-                     f'stroke="{c["color"]}" stroke-width="1.8" '
-                     f'stroke-dasharray="5 3" opacity="0.85"/>')
-            for x, y in ((x1, y1), (x2, y2)):
-                s.append(f'<circle cx="{x}" cy="{y}" r="2.4" fill="{c["color"]}"/>')
-            continue
-        comba = min(34, 10 + abs(x2 - x1) * 0.18)
-        cy = min(y1, y2) - comba if y1 < y2 else max(y1, y2) + comba
-        s.append(f'<path d="M {x1},{y1} Q {(x1 + x2) / 2},{cy} {x2},{y2}" '
-                 f'fill="none" stroke="{c["color"]}" stroke-width="1.8" opacity="0.9"/>')
-        for x, y in ((x1, y1), (x2, y2)):
-            s.append(f'<circle cx="{x}" cy="{y}" r="2.4" fill="{c["color"]}"/>')
+    # --- los troncos: una horizontal por carril y una vertical por pin
+    for tronco in ruteo["troncos"]:
+        y0 = y_de_tablero[tronco["tablero"]]
+        yc = _y_carril(tronco["lado"], tronco["carril"], y0)
+        color = tronco["color"]
+        x1, x2 = x_de(tronco["col_min"]), x_de(tronco["col_max"])
+        if x2 > x1:
+            s.append(f'<line x1="{x1}" y1="{yc:.1f}" x2="{x2}" y2="{yc:.1f}" '
+                     f'stroke="{color}" stroke-width="2" stroke-linecap="round"/>')
+        for col in tronco["columnas"]:
+            x = x_de(col)
+            yp = _y_de(tronco["lado"], 0, y0)
+            s.append(f'<line x1="{x}" y1="{yp:.1f}" x2="{x}" y2="{yc:.1f}" '
+                     f'stroke="{color}" stroke-width="2" stroke-linecap="round"/>')
+            # el agujero del pin y el agujero libre donde entra el cable
+            s.append(f'<circle cx="{x}" cy="{yp:.1f}" r="2.4" fill="{color}"/>')
+            s.append(f'<circle cx="{x}" cy="{yc:.1f}" r="2.4" fill="{color}"/>')
 
-    # puentes de + y - entre tableros
+    # --- puentes entre lados o entre tableros, tambien en angulo recto
+    canal_libre = [PASO * 4.2]
+    for p in ruteo["puentes"]:
+        a, b = p["de"], p["a"]
+        ya = _y_carril(a["lado"], a["carril"], y_de_tablero[a["tablero"]])
+        yb = _y_carril(b["lado"], b["carril"], y_de_tablero[b["tablero"]])
+        if a["tablero"] != b["tablero"]:
+            # cable largo de un tablero a otro: se va por la orilla, no por
+            # encima de los agujeros
+            x = canal_libre[0]
+            canal_libre[0] += PASO * 0.55
+            xa, xb = x_de(a["col_min"]), x_de(b["col_min"])
+        else:
+            x = x_de(p["columna"])
+            xa = min(max(x, x_de(a["col_min"])), x_de(a["col_max"]))
+            xb = min(max(x, x_de(b["col_min"])), x_de(b["col_max"]))
+        trazo = (f'M {xa},{ya:.1f} L {x:.1f},{ya:.1f} L {x:.1f},{yb:.1f} '
+                 f'L {xb},{yb:.1f}')
+        s.append(f'<path d="{trazo}" fill="none" stroke="{p["color"]}" '
+                 f'stroke-width="2" stroke-dasharray="6 3" opacity="0.95"/>')
+
+    # --- puentes de alimentacion entre tableros
     for t in tableros[:-1]:
-        y0 = y_de_tablero[t["indice"]]
-        y1 = y_de_tablero[t["indice"] + 1]
-        for dx, color, arriba in ((PASO * 1.2, "#d62728", True), (PASO * 2.4, "#222", False)):
-            ya = y0 + alto_t - PASO * (1.0 if arriba else 2.0)
-            yb = y1 + PASO * (1.0 if arriba else 2.0)
-            s.append(f'<path d="M {dx},{ya} L {dx},{yb}" stroke="{color}" '
-                     f'stroke-width="2.4" fill="none"/>')
-        s.append(f'<text x="{PASO * 3.2:.0f}" y="{y0 + alto_t + 22}" font-size="11" '
-                 f'fill="#666">puentes de + y - al siguiente tablero</text>')
+        y0, y1 = y_de_tablero[t["indice"]], y_de_tablero[t["indice"] + 1]
+        for nodo, color, dx in (("VCC", "#c0392b", PASO * 1.0),
+                                ("GND", "#2c3e50", PASO * 1.9)):
+            ya = _y_riel(y0, "abajo", nodo)
+            yb = _y_riel(y1, "arriba", nodo)
+            s.append(f'<path d="M {dx:.0f},{ya:.1f} L {dx:.0f},{yb:.1f}" '
+                     f'stroke="{color}" stroke-width="2.4" fill="none"/>')
+        s.append(f'<text x="{PASO * 3:.0f}" y="{(ya + yb) / 2:.0f}" font-size="10" '
+                 f'fill="#777">puentes de + y &#8722;</text>')
 
     if titulo:
-        s.append(f'<text x="{PASO}" y="16" font-size="13" fill="#333">{titulo}</text>')
+        s.append(f'<text x="{PASO}" y="18" font-size="13" fill="#333">'
+                 f'{_esc_svg(titulo)}</text>')
     s.append("</svg>")
     return "\n".join(s)
+
+
+def _esc_svg(txt):
+    return (str(txt).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
 
 
 def _tablero_vacio(y0, columnas, indice, total):

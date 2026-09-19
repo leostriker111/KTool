@@ -48,6 +48,11 @@
   cabe, puentes de + y - entre ellos, y el dibujo con relieve.
 - CLI: `--proto`, `--proto-modo`, `--proto-chips` y `--proto-extremos` (puntos, led,
   7seg_cc, 7seg_ca, 16seg_cc, 16seg_ca).
+- El cableado de la protoboard, planchado: **angulos rectos** en vez de curvas, carriles
+  repartidos por intervalos para que dos cables no se crucen yendo en paralelo, y los
+  cables metidos en los **agujeros libres** de cada columna. Los puentes largos entre
+  tableros bajan en haz por la orilla, sin cruzar el campo de agujeros.
+- `--proto-separado`: una protoboard por salida, en vez de una sola con todo.
 
 ## 0.4.0
 

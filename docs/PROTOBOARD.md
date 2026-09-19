@@ -154,9 +154,11 @@ La función no simula, pero la herramienta sí tiene que **comprobarse a sí mis
 1. ~~**NAND y NOR en el motor**~~ — hecho.
 2. ~~**Modelo de chips y netlist**~~ — hecho: pinouts como datos, los tres modos, los
    7404, los extremos con su polaridad.
-3. ~~**Colocación y ruteo**~~ — hecho. No hizo falta un ruteador: cada pin se clava en su
-   propia columna y le quedan cuatro agujeros libres, así que **dos señales no pueden
-   compartir columna**. Sale de cómo está hecha la protoboard.
+3. ~~**Colocación y ruteo**~~ — hecho. Los cables van con **ángulos rectos**, por carriles
+   repartidos por intervalos (dos cables comparten carril sólo si no se traslapan), y se
+   meten en los **agujeros libres** de la columna de cada pin — que para eso son cinco del
+   mismo nodo. Y dos señales nunca comparten columna, eso sale de cómo está hecha la
+   protoboard.
 4. ~~**El dibujo**~~ — hecho, con relieve, colores y la lista de cables.
 5. **GUI** — falta: los botones para elegir realización, modo y extremos. La CLI ya
    los tiene (`--proto`, `--proto-modo`, `--proto-chips`, `--proto-extremos`).

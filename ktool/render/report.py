@@ -25,6 +25,7 @@ class Options:
         proto_modo="fiel",  # fiel | forzado | automatico
         proto_chips=None,   # lista de chips para el modo forzado
         proto_extremos="puntos",   # puntos | led | 7seg_cc | 7seg_ca | 16seg_cc | 16seg_ca
+        proto_separado=False,      # una protoboard por salida en vez de una sola
     ):
         self.form = form
         self.kmap = kmap
@@ -37,6 +38,7 @@ class Options:
         self.proto_modo = proto_modo
         self.proto_chips = proto_chips
         self.proto_extremos = proto_extremos
+        self.proto_separado = proto_separado
 
 
 def _seccion_protoboard(table, solutions, opt):
@@ -44,14 +46,43 @@ def _seccion_protoboard(table, solutions, opt):
     from ..proto import netlist as _net, tablero as _tab
 
     forma = _forma_del_combinado(opt)
-    nombradas = [(n, solutions[n][forma]) for n in table.outputs]
     partes = ["<h2>Armado en protoboard</h2>"]
+
+    if opt.proto_separado and len(table.outputs) > 1:
+        partes.append("<p class='hint'>Un armado por salida: cada subcircuito en su "
+                      "propia protoboard, sin compuertas compartidas entre salidas. "
+                      "Sale mas material que el armado junto, pero cada tablero se "
+                      "prueba y se corrige por separado.</p>")
+        total = 0
+        for nombre in table.outputs:
+            bloque, chips_usados = _un_protoboard(
+                [(nombre, solutions[nombre][forma])], forma, opt,
+                f"Salida {nombre}")
+            total += chips_usados
+            partes.append(bloque)
+        partes.append(f"<p class='hint'>En total, <b>{total} encapsulado(s)</b> "
+                      "sumando todos los tableros.</p>")
+        return "".join(partes)
+
+    bloque, _ = _un_protoboard(
+        [(n, solutions[n][forma]) for n in table.outputs], forma, opt, "")
+    partes.append(bloque)
+    return "".join(partes)
+
+
+def _un_protoboard(nombradas, forma, opt, encabezado):
+    """Un armado: chips, dibujo y lista de cables. Devuelve (html, n_chips)."""
+    from ..proto import netlist as _net, tablero as _tab
+
+    partes = []
+    if encabezado:
+        partes.append(f"<h3>{_esc(encabezado)}</h3>")
     try:
         net = _net.construir(nombradas, forma, opt.proto_modo,
                              opt.proto_chips, opt.proto_extremos)
     except Exception as e:
-        return ("<h2>Armado en protoboard</h2><p class='hint'>No se pudo armar: "
-                f"{_esc(str(e))}</p>")
+        return ("".join(partes) +
+                f"<p class='hint'>No se pudo armar: {_esc(str(e))}</p>"), 0
 
     inventario = {}
     for p in net["pastillas"]:
@@ -69,7 +100,7 @@ def _seccion_protoboard(table, solutions, opt):
         partes.append("<p class='hint'><b>Ojo:</b> el circuito quedo incompleto; "
                       "el dibujo no alcanza para armarlo.</p>")
 
-    svg, ruteo, tableros = _tab.dibujar(net, titulo="")
+    svg, ruteo, tableros = _tab.dibujar(net, titulo=encabezado)
     partes.append(f"<div class='protowrap'>{svg}</div>")
 
     partes.append("<h3>Lista de cables</h3>")
@@ -82,7 +113,7 @@ def _seccion_protoboard(table, solutions, opt):
                       f"<td><code>{_esc(c['de'])}</code></td>"
                       f"<td><code>{_esc(c['a'])}</code></td></tr>")
     partes.append("</tbody></table>")
-    return "".join(partes)
+    return "".join(partes), total
 
 
 def _forma_del_combinado(opt):
