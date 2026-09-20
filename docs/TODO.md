@@ -42,6 +42,21 @@
   empieza, no por donde se acaba. Incluir mas componentes y mas tamanos de
   protoboard; capaz estamos limitados de pensamiento.
 
+#### Lo que falta para quitarle el (beta)
+
+- **Los botones en la GUI.** La CLI ya tiene todos los switches; la ventana no
+  los expone. Es lo unico del diseno original que queda sin hacer.
+- **Armar uno en una mesa de verdad.** La lista de cables se verifica contra la
+  tabla de verdad, pero eso son matematicas verificadas, no un armado verificado.
+- **El dibujo en circuitos grandes** (#8): lo que se degrada es la colocacion,
+  las piezas que se hablan quedan lejos. Medido y escrito en la issue.
+- **Recortar el lienzo al contenido.** El SVG reserva 199.5 px de aire arriba y
+  abajo de cada tablero, se usen o no; en un circuito de un solo tablero eso es
+  la mitad de la imagen en blanco. Las capturas del README van recortadas a mano
+  por esto mismo.
+- **Faltan chips en el catalogo:** 7447/7448 (que es lo que de verdad maneja un
+  display), 7474/7476, 7430, y OR/NOR de 4 entradas.
+
 
 ## Release 3 — Maquinas de estado (en diseño)
 

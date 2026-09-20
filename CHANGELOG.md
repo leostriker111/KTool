@@ -14,7 +14,15 @@
   un traceback y uno negativo se envolvia en silencio a otra tabla. Ahora cada caso sale
   con su motivo y codigo distinto de cero (#3).
 
-## Protoboard (en construccion)
+## Protoboard (beta)
+
+Se marca **beta** en el README, en `--help` y en el documento generado: la lista de
+cables esta verificada contra la tabla de verdad, pero nadie lo ha armado todavia en
+una mesa real, la GUI aun no tiene los botones, y en circuitos grandes el dibujo se
+enreda (#8).
+
+- Ejemplos ya generados en `ejemplos/`, en HTML y en PDF: el LED simple y el
+  decodificador de BCD a 7 segmentos. `ejemplos/README.md` dice como se rehacen.
 
 - Realizaciones **NAND-only** y **NOR-only**: el motor las genera, con su ecuacion, su
   costo, su diagrama con bolitas de negacion y sus siete lenguajes. `--form nand` y

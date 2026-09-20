@@ -48,7 +48,10 @@ def _seccion_protoboard(table, solutions, opt):
     from ..proto import netlist as _net, tablero as _tab
 
     forma = _forma_del_combinado(opt)
-    partes = ["<h2>Armado en protoboard</h2>"]
+    partes = ["<h2>Armado en protoboard <sup class='beta'>beta</sup></h2>",
+              "<p class='hint'>En beta: la lista de cables esta verificada contra la "
+              "tabla de verdad, pero nadie lo ha armado todavia en una mesa de verdad. "
+              "Comprueba antes de conectar la fuente.</p>"]
 
     if opt.proto_separado and len(table.outputs) > 1:
         partes.append("<p class='hint'>Un armado por salida: cada subcircuito en su "
@@ -443,6 +446,7 @@ table{border-collapse:collapse;margin:8px 0;}
 .legend{margin-top:8px;font-size:12px;}
 .outcard{margin-bottom:18px;}
 .hint{color:#666;font-size:12px;font-style:italic;}
+.beta{font-size:11px;font-style:italic;color:#9a6b1f;background:#fdf3e0;border:1px solid #e8d4a8;border-radius:3px;padding:1px 5px;vertical-align:middle;margin-left:6px;}
 .guide{background:#eef4ff;border:1px solid #c8d8f0;border-radius:6px;padding:8px 12px;margin:10px 0;}
 .guide summary{font-weight:bold;cursor:pointer;}
 .guidebody{font-size:13px;line-height:1.6;}

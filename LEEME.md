@@ -70,7 +70,8 @@ confirma la salida antes de construir algo encima.
 - [Instalación](#instalación)
 - [Cómo se empieza (CLI)](#cómo-se-empieza-cli) · [Sintaxis de expresiones](#sintaxis-de-expresiones)
 - [Cómo se usa (GUI)](#cómo-se-usa-gui)
-- [Qué sale](#qué-sale) · [Limitaciones conocidas](#limitaciones-conocidas)
+- [Qué sale](#qué-sale) · [Armado en protoboard](#armado-en-protoboard-beta) *(beta)*
+- [Limitaciones conocidas](#limitaciones-conocidas)
 - [Para quien quiera meter mano](#contribuir)
 
 > **El comando se llama `ktool`.** `kmap` es un alias histórico —el proyecto nació
@@ -178,6 +179,65 @@ Con más de una salida agrega una sección con los términos que aparecen en var
 Las ecuaciones salen además en **Verilog, VHDL, ABEL, Logisim, C, Python y
 LaTeX**, cada una con su botón de copiar.
 
+## Armado en protoboard <sup>beta</sup>
+
+Lo más nuevo, y el motivo de la versión: ktool ahora convierte las ecuaciones en
+**un armado de verdad sobre protoboard** — qué chips, dónde van, y cada cable con
+su color.
+
+<img src="docs/imagenes/proto-chico.png" width="880" alt="Una protoboard generada: tres chips DIP con un ligero relieve, los switches de entrada a la izquierda, cables de colores en ángulos rectos, una resistencia de 220 ohm y un LED en la salida, y los rieles de alimentación puenteados">
+
+Esa es `Y = B'C + A` con un LED al final, generada con un solo comando. Lo que
+resolvió solo:
+
+- **Qué encapsulados.** Tres modos: *fiel* al diagrama dibujado (aunque de las
+  cuatro AND de un 7408 se use una), *forzado* a los chips que de verdad tienes
+  en el cajón, o *automático*, agarrando el ancho mayor que ocupa el circuito.
+- **Los literales negados.** En el papel `A'` es un riel; en la protoboard no
+  existe, así que mete un 7404 y lo invierte.
+- **Por dónde van los cables.** Cada uno sale del socle libre más cercano, no de
+  la patita del CI, en ángulos rectos y sin correr encima de otro cable.
+- **Los extremos.** Puntos, LED con su resistencia, displays de 7 y de 16
+  segmentos, en ánodo y en cátodo común — con la polaridad resuelta: en ánodo
+  común el segmento enciende en **BAJO**, así que minimiza los ceros.
+- **Más tableros** cuando uno no alcanza, con el salto dibujado entre ellos.
+
+Además: **realizaciones NAND-only y NOR-only**, que antes no existían. Importan
+aquí porque en el papel el costo son compuertas, pero en la mesa son
+encapsulados: 3 AND + 1 OR son 4 compuertas y **2 chips**; eso mismo en puro NAND
+son 4 compuertas y **1 chip**.
+
+### Ver uno sin instalar nada
+
+| Ejemplo | Qué muestra | Abrir |
+|---|---|---|
+| **LED simple** | El de arriba: `Y = B'C + A`, tres encapsulados. | [PDF](ejemplos/led-simple.pdf) · [HTML](ejemplos/led-simple.html) |
+| **BCD a 7 segmentos** | Cuatro entradas, siete salidas que comparten términos, display de cátodo común, nueve encapsulados en dos tableros. | [PDF](ejemplos/bcd-7segmentos.pdf) · [HTML](ejemplos/bcd-7segmentos.html) |
+
+```
+ktool -n 3 -m 1,4,5,6 -d 2,7 --proto --proto-extremos led --out salida.html
+```
+
+Todos los switches están en `ktool --help`: `--proto-modo`, `--proto-chips`,
+`--proto-extremos`, `--proto-separado`, `--proto-color-salidas`.
+
+### Por qué dice beta
+
+Tres razones honestas:
+
+1. **Nadie ha armado uno en una mesa de verdad todavía.** La lista de cables está
+   verificada contra la tabla de verdad — el netlist se evalúa y se compara fila
+   por fila — pero eso son *matemáticas* verificadas, no un *armado* verificado.
+2. **La GUI todavía no tiene botones para esto.** La CLI tiene todos los
+   switches; la interfaz gráfica aún no los expone.
+3. **En circuitos grandes el dibujo se vuelve una telaraña.** Está medido y
+   escrito en la [issue #8](https://github.com/leostriker111/KTool/issues/8): lo
+   que se degrada es la colocación — las piezas que se hablan entre sí quedan
+   lejos. El ejemplo del BCD de arriba es justamente ese caso, y está puesto a
+   propósito.
+
+<img src="docs/imagenes/proto-bcd.png" width="880" alt="El decodificador de BCD a 7 segmentos en dos protoboards: nueve encapsulados, el display, y una maraña densa de cables de colores entre los dos tableros">
+
 ## Limitaciones conocidas
 
 Vale la pena decirlas claro, porque todo el chiste es ser confiable:
@@ -189,6 +249,9 @@ Vale la pena decirlas claro, porque todo el chiste es ser confiable:
   (rieles `A'`), y no dibuja un esquemático único con las compuertas compartidas
   ya integradas — ésas se listan aparte.
 - **No hay álgebra de Boole simbólica** sobre expresiones arbitrarias.
+- **El armado en protoboard está en beta**: verificado contra la tabla de
+  verdad, pero sin armar en una mesa real, sin botones en la GUI, y enredado
+  en circuitos grandes ([#8](https://github.com/leostriker111/KTool/issues/8)).
 
 <br>
 

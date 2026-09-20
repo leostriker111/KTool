@@ -9,6 +9,17 @@ Ejemplos:
     ktool -n 3 --truth 01x011x1 --form both
     ktool -e "A^B^C" --text
     ktool -n 4 -m 0x1,0b11,5 --no-kmap --out salida.html
+
+Armado en protoboard (BETA):
+    ktool -n 3 -m 1,4,5,6 -d 2,7 --proto --out salida.html
+    ktool -n 3 -m 1,4,5,6 --proto --proto-extremos led --open
+    ktool -n 4 -m 0,1,2,5 --proto --proto-modo forzado --proto-chips 7400,7404
+    ktool -n 4 -m 0,1,2,5 --proto --form nand --proto-extremos 7seg_ca
+
+Esta en beta: la lista de cables esta verificada contra la tabla de verdad,
+pero nadie lo ha armado todavia en una mesa de verdad, la GUI aun no tiene los
+botones, y en circuitos grandes el dibujo se enreda (issue #8). Ejemplos ya
+generados en la carpeta ejemplos/ del repo.
 """
 
 from __future__ import annotations
@@ -75,7 +86,8 @@ def _build_parser():
     p.add_argument("--to", help="traducir la expresion -e directo a un lenguaje (ej: verilog) sin minimizar")
     # protoboard
     p.add_argument("--proto", action="store_true",
-                   help="incluir el armado en protoboard: chips, tablero y lista de cables")
+                   help="[BETA] incluir el armado en protoboard: chips, tablero y "
+                        "lista de cables")
     p.add_argument("--proto-modo", choices=["fiel", "forzado", "automatico"],
                    default="fiel",
                    help="como elegir los chips: fiel al diagrama, forzado a --proto-chips, "
