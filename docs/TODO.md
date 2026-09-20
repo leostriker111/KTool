@@ -30,6 +30,34 @@
 
 
 
+### Protoboard (en diseno, ver docs/PROTOBOARD.md)
+
+- Generar las realizaciones NAND-only y NOR-only: hoy no existen ni su diagrama.
+- Modelo de chips con pinouts como datos, y los tres modos de seleccion (fiel al
+  diagrama, forzado por el usuario, automatico al ancho mayor).
+- Colocacion y ruteo sin colisiones, varias protoboards con sus puentes de + y -.
+- Extremos elegibles: puntos, LED+resistencia, display de 7 y de 16 segmentos en
+  anodo y en catodo comun. Ojo con la polaridad: anodo comun enciende en bajo.
+- **Nota:** el tope de 63 columnas y esta lista de componentes son por donde se
+  empieza, no por donde se acaba. Incluir mas componentes y mas tamanos de
+  protoboard; capaz estamos limitados de pensamiento.
+
+#### Lo que falta para quitarle el (beta)
+
+- **Los botones en la GUI.** La CLI ya tiene todos los switches; la ventana no
+  los expone. Es lo unico del diseno original que queda sin hacer.
+- **Armar uno en una mesa de verdad.** La lista de cables se verifica contra la
+  tabla de verdad, pero eso son matematicas verificadas, no un armado verificado.
+- **El dibujo en circuitos grandes** (#8): lo que se degrada es la colocacion,
+  las piezas que se hablan quedan lejos. Medido y escrito en la issue.
+- **Recortar el lienzo al contenido.** El SVG reserva 199.5 px de aire arriba y
+  abajo de cada tablero, se usen o no; en un circuito de un solo tablero eso es
+  la mitad de la imagen en blanco. Las capturas del README van recortadas a mano
+  por esto mismo.
+- **Faltan chips en el catalogo:** 7447/7448 (que es lo que de verdad maneja un
+  display), 7474/7476, 7430, y OR/NOR de 4 entradas.
+
+
 ## Release 3 — Maquinas de estado (en diseño)
 
 Objetivo: que ktool reciba un diagrama / tabla de estados y entregue los pasos
