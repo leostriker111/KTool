@@ -5,6 +5,10 @@
 - Arreglado: pegar dos letras vuelve a significar AND (`AB` = A AND B). Se leia como
   una sola variable llamada `AB` y devolvia una funcion equivocada sin avisar (#1).
 - Pruebas automatizadas (`unittest`, sin dependencias) y la CI ya las corre.
+- Arreglado: con 6 variables la minimizacion tardaba de 18 s a mas de 100 s, y de paso
+  congelaba la ventana. La cobertura ya no expande el producto de Petrick: reduce por
+  esenciales y dominancia, y solo ramifica con poda sobre lo que quede. La misma respuesta
+  exacta y minima, en centesimas de segundo (#2).
 
 ## 0.4.0
 
