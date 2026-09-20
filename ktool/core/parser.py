@@ -14,6 +14,8 @@ class Parser:
         return self.toks[self.pos] if self.pos < len(self.toks) else None
 
     def eat(self):
+        if self.pos >= len(self.toks):
+            raise ValueError("expresion mal formada: se termina antes de tiempo")
         t = self.toks[self.pos]
         self.pos += 1
         return t

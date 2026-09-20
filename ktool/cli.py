@@ -53,7 +53,8 @@ def _build_parser():
     sub.add_parser("gui", help="abre la interfaz grafica")
 
     # opciones de entrada (comando por defecto = resolver)
-    p.add_argument("-n", "--vars", type=int, help="numero de variables (2-6)")
+    p.add_argument("-n", "--vars", type=int,
+                   help=f"numero de variables ({table.MIN_VARS}-{table.MAX_VARS})")
     p.add_argument("-e", "--expr", help="expresion booleana (ej: \"A'B + C\")")
     p.add_argument("-m", "--minterms", help="minterminos: dec, 0x.. hex o 0b.. bin")
     p.add_argument("-d", "--dontcares", help="don't cares (misma sintaxis)")
@@ -78,26 +79,42 @@ def _build_parser():
 
 
 def _table_from_args(args):
+    """Arma la tabla pedida. Cualquier entrada invalida sale como SystemExit
+    con su motivo, nunca como un traceback."""
+    if args.vars is not None:
+        table.validar_nvars(args.vars)
+
     if args.expr:
         return TruthTable.from_expression(args.expr, nvars=args.vars, name=args.name)
 
     if args.truth is not None:
         vals = table.parse_truth_string(args.truth)
+        if not vals:
+            raise ValueError("el vector --truth esta vacio")
         n = (len(vals) - 1).bit_length()
         if 1 << n != len(vals):
-            raise SystemExit(f"el vector --truth tiene {len(vals)} valores; debe ser potencia de 2")
+            raise ValueError(
+                f"el vector --truth tiene {len(vals)} valores; debe ser potencia de 2"
+            )
         if args.vars and (1 << args.vars) != len(vals):
-            raise SystemExit(f"--vars {args.vars} no concuerda con --truth de largo {len(vals)}")
+            raise ValueError(
+                f"--vars {args.vars} no concuerda con --truth de largo {len(vals)} "
+                f"(serian {n} variables)"
+            )
+        table.validar_nvars(n)
         return TruthTable(n, outputs={args.name: vals})
 
     if args.minterms is not None:
         if not args.vars:
-            raise SystemExit("usa -n/--vars con -m/--minterms")
+            raise ValueError("usa -n/--vars con -m/--minterms")
         mins = table.parse_index_list(args.minterms)
         dcs = table.parse_index_list(args.dontcares) if args.dontcares else []
         return TruthTable.from_minterms(args.vars, mins, dcs, name=args.name)
 
-    raise SystemExit("nada que resolver: usa -e, -m o --truth (o 'ktool gui'). Mira 'ktool -h'.")
+    if args.dontcares is not None:
+        raise ValueError("-d/--dontcares necesita -m/--minterms")
+
+    raise ValueError("nada que resolver: usa -e, -m o --truth (o 'ktool gui'). Mira 'ktool -h'.")
 
 
 def _print_text(table):
@@ -132,10 +149,16 @@ def main(argv=None):
         lang = _canon_lang(args.to)
         if not lang:
             raise SystemExit(f"lenguaje desconocido para --to: '{args.to}'")
-        print(codegen.translate(args.expr, args.name, lang))
+        try:
+            print(codegen.translate(args.expr, args.name, lang))
+        except ValueError as e:
+            raise SystemExit(str(e))
         return
 
-    table = _table_from_args(args)
+    try:
+        table = _table_from_args(args)
+    except ValueError as e:
+        raise SystemExit(str(e))
 
     if args.text:
         _print_text(table)
