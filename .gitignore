@@ -14,3 +14,4 @@ venv/
 .specstory/
 
 docs_priv/
+packaging/Output/

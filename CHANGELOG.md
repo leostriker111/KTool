@@ -2,6 +2,12 @@
 
 ## Sin publicar
 
+- Arreglado: el instalador de Windows decia que dejaba `ktool` en el PATH, pero solo
+  instalaba `kmap.exe`: en una terminal, `ktool` no existia. Ahora instala `ktool.exe`,
+  deja `kmap` como alias (`kmap.cmd`), borra el `kmap.exe` viejo al actualizar, agrega la
+  carpeta al PATH una sola vez aunque se reinstale, la quita al desinstalar y al final
+  avisa que hay que abrir una terminal nueva.
+
 - Arreglado: pegar dos letras vuelve a significar AND (`AB` = A AND B). Se leia como
   una sola variable llamada `AB` y devolvia una funcion equivocada sin avisar (#1).
 - Pruebas automatizadas (`unittest`, sin dependencias) y la CI ya las corre.
