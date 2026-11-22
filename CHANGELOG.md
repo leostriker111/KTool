@@ -1,6 +1,6 @@
 # Cambios
 
-## Sin publicar
+## 0.4.1
 
 - Arreglado: el instalador de Windows decia que dejaba `ktool` en el PATH, pero solo
   instalaba `kmap.exe`: en una terminal, `ktool` no existia. Ahora instala `ktool.exe`,
@@ -24,7 +24,7 @@
   un traceback y uno negativo se envolvia en silencio a otra tabla. Ahora cada caso sale
   con su motivo y codigo distinto de cero (#3).
 
-## Protoboard (beta)
+### Protoboard (beta)
 
 Se marca **beta** en el README, en `--help` y en el documento generado: la lista de
 cables esta verificada contra la tabla de verdad, pero nadie lo ha armado todavia en

@@ -7,8 +7,12 @@ on:
 
 jobs:
   smoke:
-    runs-on: ubuntu-latest
+    # Fijo en 24.04: es el Ubuntu mas nuevo donde setup-python todavia trae 3.8,
+    # y el proyecto promete 3.8+ (pyproject y README). ubuntu-latest ya es 26.04.
+    runs-on: ubuntu-24.04
     strategy:
+      # Que una version que truene no cancele la otra: se ve el resultado de ambas.
+      fail-fast: false
       matrix:
         python-version: ["3.8", "3.12"]
     steps:
