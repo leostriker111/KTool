@@ -26,4 +26,4 @@ Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $dest
 
 Write-Host "Ejecutando el instalador..."
 Start-Process -FilePath $dest -Wait
-Write-Host "Listo. Abre una terminal nueva y ejecuta: kmap -h" -ForegroundColor Green
+Write-Host "Listo. Abre una terminal NUEVA y ejecuta, desde cualquier carpeta: ktool -h" -ForegroundColor Green

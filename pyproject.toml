@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ktool"
-version = "0.4.0"
+version = "0.4.1"
 description = "Simplificador de logica digital: mapas de Karnaugh, SOP/POS, compuertas y reuso de terminos"
 readme = "README.md"
 requires-python = ">=3.8"
