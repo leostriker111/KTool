@@ -21,8 +21,20 @@ jobs:
       - name: Instalar PyInstaller
         run: pip install pyinstaller
 
+      # --paths . es obligatorio: el lanzador vive en packaging\ y el comando
+      # `pyinstaller` no busca en la carpeta actual, asi que sin esto el paquete
+      # ktool no entra al .exe y truena con "No module named 'ktool'" (asi salio
+      # la v0.4.0). `python -m PyInstaller` si la busca, por eso en local no se veia.
       - name: Construir ejecutable
-        run: pyinstaller --onefile --name ktool packaging\ktool_launcher.py
+        run: pyinstaller --onefile --name ktool --paths . packaging\ktool_launcher.py
+
+      # Se corre desde otra carpeta, como lo usaria cualquiera. Si el .exe no
+      # arranca, el release falla aqui en vez de publicarse roto.
+      - name: Probar que el ejecutable arranca fuera del repo
+        run: |
+          Set-Location $env:RUNNER_TEMP
+          & "$env:GITHUB_WORKSPACE\dist\ktool.exe" -h
+          if ($LASTEXITCODE -ne 0) { throw "ktool.exe no arranca fuera del repo" }
 
       - name: Instalar Inno Setup
         run: choco install innosetup --no-progress -y

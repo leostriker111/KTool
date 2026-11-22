@@ -7,6 +7,10 @@
   deja `kmap` como alias (`kmap.cmd`), borra el `kmap.exe` viejo al actualizar, agrega la
   carpeta al PATH una sola vez aunque se reinstale, la quita al desinstalar y al final
   avisa que hay que abrir una terminal nueva.
+- Arreglado: el `kmap.exe` de la 0.4.0 tronaba al abrir con `No module named 'ktool'`:
+  PyInstaller lo armaba sin el paquete porque el lanzador vive en `packaging\` y nadie le
+  decia que buscara en la raiz. Ahora se construye con `--paths .` y el release prueba el
+  `.exe` desde otra carpeta antes de publicarlo.
 
 - Arreglado: pegar dos letras vuelve a significar AND (`AB` = A AND B). Se leia como
   una sola variable llamada `AB` y devolvia una funcion equivocada sin avisar (#1).
