@@ -1,5 +1,9 @@
 # Instala ktool desde el codigo fuente (requiere Python en el PATH).
 # Copia el paquete a la carpeta de usuario, crea el comando 'ktool' (y el alias 'kmap') y lo agrega al PATH.
+#
+# Se corre asi (Windows trae los scripts deshabilitados; -ExecutionPolicy Bypass
+# los permite solo para esta vez, sin cambiar la configuracion de la compu):
+#     powershell -ExecutionPolicy Bypass -File packaging\install.ps1
 
 $ErrorActionPreference = "Stop"
 
@@ -24,12 +28,26 @@ python "%~dp0ktool_launcher.py" %*
 Set-Content -Path (Join-Path $dir "kmap.cmd") -Value $cmd -Encoding ASCII
 Set-Content -Path (Join-Path $dir "ktool.cmd") -Value $cmd -Encoding ASCII
 
-$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-if ($userPath -notlike "*$dir*") {
-    [Environment]::SetEnvironmentVariable("Path", "$userPath;$dir", "User")
-    Write-Host "Agregado al PATH del usuario." -ForegroundColor Green
-} else {
+# El PATH del usuario se lee y se escribe CRUDO, directo del registro.
+# [Environment]::GetEnvironmentVariable lo devuelve ya expandido, y al volverlo a
+# escribir las entradas como %USERPROFILE%\... quedaban fijas y el valor pasaba de
+# REG_EXPAND_SZ a REG_SZ. Se compara entrada por entrada (no por subcadena) para
+# no agregar la carpeta dos veces.
+$clave = "HKCU:\Environment"
+$crudo = (Get-Item $clave).GetValue("Path", "", "DoNotExpandEnvironmentNames")
+$entradas = @($crudo -split ";" | Where-Object { $_.Trim() -ne "" })
+$ya = $entradas | Where-Object { $_.TrimEnd("\") -ieq $dir.TrimEnd("\") }
+if ($ya) {
     Write-Host "Ya estaba en el PATH."
+} else {
+    $nuevo = (@($entradas) + $dir) -join ";"
+    New-ItemProperty -Path $clave -Name "Path" -Value $nuevo -PropertyType ExpandString -Force | Out-Null
+    # Escribir el registro no avisa a Windows; crear y borrar una variable con
+    # SetEnvironmentVariable si manda el aviso (WM_SETTINGCHANGE), y asi las
+    # terminales que se abran desde el Explorador ya ven la carpeta.
+    [Environment]::SetEnvironmentVariable("KTOOL_AVISO", "1", "User")
+    [Environment]::SetEnvironmentVariable("KTOOL_AVISO", $null, "User")
+    Write-Host "Agregado al PATH del usuario." -ForegroundColor Green
 }
 
 Write-Host ""
