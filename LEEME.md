@@ -71,6 +71,7 @@ confirma la salida antes de construir algo encima.
 - [Cómo se empieza (CLI)](#cómo-se-empieza-cli) · [Sintaxis de expresiones](#sintaxis-de-expresiones)
 - [Cómo se usa (GUI)](#cómo-se-usa-gui)
 - [Qué sale](#qué-sale) · [Armado en protoboard](#armado-en-protoboard-beta) *(beta)*
+- [Kit de hardware](#kit-de-hardware) — el mismo circuito para PIC, ESP32, Arduino, FPGA, GAL y 74LS
 - [Limitaciones conocidas](#limitaciones-conocidas)
 - [Para quien quiera meter mano](#contribuir)
 
@@ -127,6 +128,7 @@ ktool -h                                  # ayuda completa
 | `--no-kmap` / `--no-circuit` / `--no-table` | Dejar fuera una sección. |
 | `--gates-only` | Sólo compuertas (apaga K-map y tabla). |
 | `--text` | Sólo imprime las ecuaciones en la terminal. |
+| `--hw carpeta` | Escribe el [kit de hardware](#kit-de-hardware): el circuito como código para cada placa de abajo. |
 | `--out archivo.html` / `--open` / `--title "..."` | Dónde va el documento, si se abre, y su título. |
 
 ### Sintaxis de expresiones
@@ -238,6 +240,54 @@ Tres razones honestas:
 
 <img src="docs/imagenes/proto-bcd.png" width="880" alt="El decodificador de BCD a 7 segmentos en dos protoboards: nueve encapsulados, el display, y una maraña densa de cables de colores entre los dos tableros">
 
+## Kit de hardware
+
+El circuito minimizado, del papel a la mesa: un solo comando escribe una carpeta
+con **código listo para compilar en cada placa común de un laboratorio de
+sistemas digitales**, y el cableado de pines de cada una. Todos los archivos
+están completos. Ninguno trae funciones vacías ni `// TODO`, y cada uno empieza
+con una tabla de qué señal va a qué pin físico.
+
+```powershell
+ktool -e "A'B + C" --hw kit
+ktool -n 4 -m 0,1,2,5 --form nand --hw kit_nand    # en la forma que pidas
+```
+
+| plataforma | qué sale |
+|---|---|
+| **PIC** 18F4550, 18F45K50, 16F877A, 16F628A, 16F84A | Un `.c` para MPLAB X + XC8 con los bits de configuración, `_XTAL_FREQ`, lo analógico apagado como lo pide la hoja de datos de *cada* chip (`ADCON1 = 0x06` en el 877A, no `0x0F`) y `TRIS`/`LAT` puestos a mano. |
+| **ESP32** WROOM-32, S3, C3 | Un sketch de Arduino y un `main.py` de MicroPython, con el mismo acomodo de pines. |
+| **Arduino** Uno/Nano, o Mega 2560 | El Uno si cabe; si no, el Mega, solo. |
+| **STM32** Blue Pill | Un sketch para STM32duino. Las entradas van en pines tolerantes a 5 V. |
+| **Raspberry Pi Pico** | MicroPython con los pull-down internos puestos. |
+| **VHDL y Verilog** | Fuentes sintetizables, y **un banco de prueba en cada uno** que recorre todas las combinaciones contra la tabla de verdad. |
+| **MAX II EPM240T100C5** | Un proyecto de Quartus Prime (`.qpf` + `.qsf`) solo con pines de I/O de usuario. |
+| **GAL22V10** | Un `.pld` de WinCUPL, con cada salida en una macrocelda con lugar para sus términos producto. |
+| **Chips 74LS** | La lista de materiales («1× 74LS00, 2 compuertas usadas de 4») y cada cable, pata por pata. |
+| **Python** | Un script autónomo que imprime la tabla de verdad de las ecuaciones y la compara con la tuya. |
+
+**Cuando una placa no alcanza, lo dice en vez de escribir código roto.** El
+`LEEME.md` del kit da la cuenta exacta:
+
+```text
+-- ESP32-C3 (DevKitM-1 / SuperMini)
+   Variante bloqueada: requiere 6 entradas + 10 salidas = 16 pines y ESP32-C3
+   (DevKitM-1 / SuperMini) solo tiene 13 utilizables (8 seguros + 5 de reserva)
+-- PIC16F84A
+   Variante bloqueada: el programa necesitaria unas 1325 palabras (128 terminos)
+   y el PIC16F84A tiene 1024; usa uno con mas memoria
+```
+
+**Los pines que estorban a otra cosa se guardan.** Eso incluye la flash y los
+pines de *strapping* del ESP32, el PGC/PGD del PICkit, las líneas de USB y el
+drenador abierto de RA4. Solo se usan cuando ya no queda otro, y en ese caso la
+tabla de pines lleva el aviso junto a ellos.
+
+**Cómo se comprobó.** Cada archivo pasó por la herramienta real de su plataforma, sobre 21 circuitos generados (de 2 a 6 entradas, de 1 a 24 salidas, en todas las formas, incluidos los peores casos de memoria): **88 archivos de PIC** compilados con XC8 v3.10 sin errores ni advertencias; **21 sketches de Arduino** (Uno o Mega) compilados con `arduino-cli`; **42 bancos de prueba** corridos en GHDL (VHDL) e Icarus Verilog, con todas las combinaciones iguales a la tabla de verdad; y las 21 simulaciones en Python. Encima, las pruebas revisan la lógica de cada salida (la ecuación en C, las máscaras del PIC, el archivo de MicroPython corrido con un `machine` de mentira) fila por fila en unas 150 tablas al azar. El detalle está en [docs/HARDWARE.md](docs/HARDWARE.md).
+
+Por ahora solo circuitos **combinacionales**. Las máquinas de estado, con reloj y
+reset, llegan con el Release 3.
+
 ## Limitaciones conocidas
 
 Vale la pena decirlas claro, porque todo el chiste es ser confiable:
@@ -252,6 +302,11 @@ Vale la pena decirlas claro, porque todo el chiste es ser confiable:
 - **El armado en protoboard está en beta**: verificado contra la tabla de
   verdad, pero sin armar en una mesa real, sin botones en la GUI, y enredado
   en circuitos grandes ([#8](https://github.com/leostriker111/KTool/issues/8)).
+- **El kit de hardware es solo combinacional**, y su código está compilado y
+  simulado pero todavía no se ha grabado en las placas. El archivo de la GAL
+  sigue la sintaxis de WinCUPL pero no ha pasado por WinCUPL, y el proyecto de
+  Quartus no ha pasado por Quartus: ninguno de los dos está instalado donde se
+  hizo esto.
 
 <br>
 
@@ -282,6 +337,10 @@ Donde más rendiría la ayuda:
   huecos obvios.
 - **Verificación contra un minimizador conocido** (Espresso) sobre funciones al
   azar, como prueba.
+- **Más placas para el kit de hardware.** Una placa son puros datos en
+  `hw/placas.py`: sus pines en orden de preferencia, y los que hay que evitar con
+  el porqué. Grabar un archivo generado en una placa de verdad y contar cómo le
+  fue ayuda igual.
 
 Las notas de diseño están en [docs/DESIGN.md](docs/DESIGN.md).
 
@@ -339,6 +398,21 @@ Unas 2,400 líneas, repartidas por trabajo.
 | `gui/displays.py` | 89 | Mostrar los resultados en el panel de abajo. |
 | `cli.py` | 134 | Los argumentos y la tubería. |
 | `theme.py` | 23 | Los colores que comparten la ventana y el reporte. |
+
+</details>
+
+<details>
+<summary><b>hw — el kit de hardware</b></summary>
+
+<br>
+
+| módulo | líneas | qué hace |
+|---|--:|---|
+| `hw/placas.py` | 281 | Cada placa como datos: los pines utilizables en orden, los que se guardan y por qué, las patas del DIP y la memoria. Los pines de la MAX II salen de la tabla oficial de Intel. |
+| `hw/modelo.py` | 250 | El circuito resuelto, la ecuación escrita con *todos* los paréntesis (C, Python, VHDL y Verilog ordenan los operadores distinto) y el reparto de pines que bloquea con la cuenta exacta. |
+| `hw/micros.py` | 413 | PIC, ESP32, Arduino, Blue Pill y Pico. En el PIC cada término es una comparación de máscara de bits, y así el circuito cabe en las 1K palabras de un 16F84A. |
+| `hw/logica.py` | 502 | VHDL, Verilog, los dos bancos de prueba, los archivos de Quartus, la GAL22V10, la lista de materiales 74LS (reusa el netlist del protoboard) y la simulación en Python. |
+| `hw/kit.py` | 197 | Escribe la carpeta y el resumen de qué se generó y qué se bloqueó. |
 
 </details>
 

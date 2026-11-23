@@ -68,6 +68,7 @@ before you build something on it.
 - [How to start (CLI)](#how-to-start-cli) · [Expression syntax](#expression-syntax)
 - [How to use it (GUI)](#how-to-use-it-gui)
 - [What comes out](#what-comes-out) · [Breadboard build](#breadboard-build-beta) *(beta)*
+- [Hardware kit](#hardware-kit) — the same circuit for PIC, ESP32, Arduino, FPGA, GAL and 74LS
 - [Known limitations](#known-limitations)
 - [For developers](#contributing)
 
@@ -124,6 +125,7 @@ ktool -h                                  # full help
 | `--no-kmap` / `--no-circuit` / `--no-table` | Leave a section out. |
 | `--gates-only` | Gates only (turns off K-map and table). |
 | `--text` | Just print the equations to the terminal. |
+| `--hw folder` | Write the [hardware kit](#hardware-kit): the circuit as code for every board below. |
 | `--out file.html` / `--open` / `--title "..."` | Where the document goes, whether to open it, and its title. |
 
 ### Expression syntax
@@ -233,6 +235,54 @@ Three honest reasons:
 
 <img src="docs/imagenes/proto-bcd.png" width="880" alt="The BCD to 7-segment decoder on two breadboards: nine packages, the display, and a dense tangle of coloured jumpers between the two boards">
 
+## Hardware kit
+
+The minimised circuit, taken off the page and onto the bench: one command writes
+a folder with **ready-to-compile code for every common board in a digital
+systems lab**, plus the pin wiring for each. Every file is complete. None of
+them has an empty function or a `// TODO`, and each one opens with a table of
+which signal goes to which physical pin.
+
+```powershell
+ktool -e "A'B + C" --hw kit
+ktool -n 4 -m 0,1,2,5 --form nand --hw kit_nand    # the form you ask for
+```
+
+| platform | what you get |
+|---|---|
+| **PIC** 18F4550, 18F45K50, 16F877A, 16F628A, 16F84A | A `.c` for MPLAB X + XC8 with the configuration bits, `_XTAL_FREQ`, the analogue pins switched off the way *each* datasheet asks (`ADCON1 = 0x06` on the 877A, not `0x0F`), and `TRIS`/`LAT` set explicitly. |
+| **ESP32** WROOM-32, S3, C3 | An Arduino sketch and a MicroPython `main.py`, sharing one pin layout. |
+| **Arduino** Uno/Nano, or Mega 2560 | The Uno when it fits; when it doesn't, the Mega, automatically. |
+| **STM32** Blue Pill | A sketch for STM32duino. The inputs sit on 5 V-tolerant pins. |
+| **Raspberry Pi Pico** | MicroPython with the internal pull-downs on. |
+| **VHDL and Verilog** | Synthesisable sources, and a **test bench in each** that sweeps every input combination against the truth table. |
+| **MAX II EPM240T100C5** | A Quartus Prime project (`.qpf` + `.qsf`) with user I/O pins only. |
+| **GAL22V10** | A WinCUPL `.pld`, with each output placed in a macrocell big enough for its product terms. |
+| **74LS chips** | The bill of materials ("1× 74LS00, 2 gates used of 4") and every jumper, pin to pin. |
+| **Python** | A standalone script that prints the truth table of the equations and checks it against yours. |
+
+**When a board can't take the circuit, it says so instead of writing broken
+code.** The kit's `LEEME.md` gives the exact count:
+
+```text
+-- ESP32-C3 (DevKitM-1 / SuperMini)
+   Variante bloqueada: requiere 6 entradas + 10 salidas = 16 pines y ESP32-C3
+   (DevKitM-1 / SuperMini) solo tiene 13 utilizables (8 seguros + 5 de reserva)
+-- PIC16F84A
+   Variante bloqueada: el programa necesitaria unas 1325 palabras (128 terminos)
+   y el PIC16F84A tiene 1024; usa uno con mas memoria
+```
+
+**Pins that interfere with something else are kept back.** That covers the
+ESP32's flash and strapping pins, the PICkit's PGC/PGD, USB lines and RA4's open
+drain. They are only used when nothing else is left, and the pin table then
+carries a warning next to them.
+
+**How it was checked.** Every file was put through the real tool for its platform, on 21 generated circuits (2 to 6 inputs, 1 to 24 outputs, every form, the worst cases for memory included): **88 PIC files** compiled with XC8 v3.10 with no errors or warnings; **21 Arduino sketches** (Uno or Mega) compiled with `arduino-cli`; **42 test benches** run in GHDL (VHDL) and Icarus Verilog, every combination matching the truth table; and the 21 Python simulations. On top of that the test suite checks the logic of each output (the C equation, the PIC's bit masks, the MicroPython file run against a fake `machine` module) row by row on about 150 random tables. Details in [docs/HARDWARE.md](docs/HARDWARE.md).
+
+Only **combinational** circuits for now. State machines, with clock and reset,
+arrive with Release 3.
+
 ## Known limitations
 
 Worth stating plainly, since the whole point is being trustworthy:
@@ -246,6 +296,11 @@ Worth stating plainly, since the whole point is being trustworthy:
 - **The breadboard build is beta**: verified against the truth table, but
   not yet built on a real bench, without GUI buttons, and tangled on big
   circuits ([#8](https://github.com/leostriker111/KTool/issues/8)).
+- **The hardware kit is combinational only**, and its code has been compiled
+  and simulated but not yet flashed onto the boards. The GAL file follows
+  WinCUPL's syntax but has not been through WinCUPL itself, and the Quartus
+  project has not been through Quartus: neither is installed where this was
+  built.
 
 <br>
 
@@ -276,6 +331,10 @@ Where help would go furthest:
   obvious gaps.
 - **Verification against a known-good minimiser** (Espresso) over random
   functions, as a test.
+- **More boards for the hardware kit.** A board is pure data in
+  `hw/placas.py`: its pins in order of preference, plus the ones to avoid and
+  why. Flashing a generated file onto real hardware and reporting back is just
+  as welcome.
 
 The design notes are in [docs/DESIGN.md](docs/DESIGN.md).
 
@@ -333,6 +392,21 @@ About 2,400 lines, split by job.
 | `gui/displays.py` | 89 | Showing the results in the lower panel. |
 | `cli.py` | 134 | Argument parsing and the pipeline. |
 | `theme.py` | 23 | Colours shared between the window and the report. |
+
+</details>
+
+<details>
+<summary><b>hw — the hardware kit</b></summary>
+
+<br>
+
+| module | lines | what it does |
+|---|--:|---|
+| `hw/placas.py` | 281 | Every board as data: usable pins in order, the ones held back and why, DIP pin numbers, memory. The MAX II pins come from Intel's official pin-out table. |
+| `hw/modelo.py` | 250 | The solved circuit, the equation written with *every* parenthesis (C, Python, VHDL and Verilog all order operators differently), and the pin allocator that blocks with an exact count. |
+| `hw/micros.py` | 413 | PIC, ESP32, Arduino, Blue Pill and Pico. On the PIC each term becomes a bit-mask comparison, so the circuit fits in a 16F84A's 1K words. |
+| `hw/logica.py` | 502 | VHDL, Verilog, both test benches, the Quartus files, the GAL22V10, the 74LS bill of materials (reusing the breadboard netlist) and the Python simulation. |
+| `hw/kit.py` | 197 | Writes the folder and the summary of what was generated and what was blocked. |
 
 </details>
 

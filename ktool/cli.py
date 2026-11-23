@@ -10,6 +10,10 @@ Ejemplos:
     ktool -e "A^B^C" --text
     ktool -n 4 -m 0x1,0b11,5 --no-kmap --out salida.html
 
+Kit de hardware (codigo para PIC, ESP32, Arduino, STM32, Pico, FPGA, GAL y 74LS):
+    ktool -e "A'B + C" --hw kit
+    ktool -n 4 -m 0,1,2,5 --form nand --hw kit_nand
+
 Armado en protoboard (BETA):
     ktool -n 3 -m 1,4,5,6 -d 2,7 --proto --out salida.html
     ktool -n 3 -m 1,4,5,6 --proto --proto-extremos led --open
@@ -103,6 +107,11 @@ def _build_parser():
                    choices=["puntos", "led", "7seg_cc", "7seg_ca", "16seg_cc", "16seg_ca"],
                    default="puntos",
                    help="que se conecta en las salidas (cc = catodo comun, ca = anodo comun)")
+    # kit de hardware
+    p.add_argument("--hw", metavar="CARPETA",
+                   help="generar el kit de hardware en CARPETA: codigo para PIC, ESP32, "
+                        "Arduino, STM32, Pico, VHDL/Verilog con banco de prueba, MAX II, "
+                        "GAL22V10, chips 74LS y una simulacion en Python")
     p.add_argument("--text", action="store_true", help="solo imprimir ecuaciones en la terminal")
     p.add_argument("--out", help="ruta del documento HTML a generar")
     p.add_argument("--open", action="store_true", help="abrir el documento en el navegador")
@@ -171,6 +180,22 @@ def _print_text(table):
                 print(f"  {d['term']:<14} -> {', '.join(d['outputs'])}")
 
 
+def _generar_kit(table, carpeta, forma):
+    """Escribe el kit y dice, plataforma por plataforma, que salio y que no."""
+    from .hw import kit
+    try:
+        resumen = kit.generar(table, carpeta, forma)
+    except ValueError as e:
+        raise SystemExit(str(e))
+    print(f"kit de hardware en: {carpeta}")
+    for plataforma, estado, detalle in resumen:
+        marca = "  ok " if estado == "listo" else "  -- "
+        print(f"{marca}{plataforma}")
+        if estado != "listo":
+            print(f"       {detalle}")
+    print(f"resumen completo en {carpeta}/LEEME.md")
+
+
 def main(argv=None):
     args = _build_parser().parse_args(argv)
 
@@ -205,6 +230,10 @@ def main(argv=None):
         table = _table_from_args(args)
     except ValueError as e:
         raise SystemExit(str(e))
+
+    if args.hw:
+        _generar_kit(table, args.hw, args.form)
+        return
 
     if args.text:
         _print_text(table)
