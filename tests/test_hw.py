@@ -22,7 +22,8 @@ import unittest
 
 from ktool.core.table import TruthTable
 from ktool.hw import kit, logica, micros, placas
-from ktool.hw.modelo import Bloqueo, Circuito, asignar_pines, ecuacion
+from ktool.hw.modelo import (Bloqueo, Circuito, asignar_pines, con_pines, ecuacion,
+                             leer_pines)
 
 
 def tabla_al_azar(semilla, n, salidas, con_dc=True):
@@ -241,25 +242,51 @@ class Pines(unittest.TestCase):
             self.assertNotIn(pin, placas.ESP32["esp32_wroom32"]["entradas"])
             self.assertNotIn(pin, placas.ESP32["esp32_wroom32"]["salidas"])
 
-    def test_max2_con_las_patas_del_usuario(self):
+    def test_pines_del_usuario_en_varias_placas(self):
         tabla = TruthTable(2, outputs={"Y_AND": [0, 0, 0, 1], "Y_OR": [0, 1, 1, 1]})
-        with tempfile.TemporaryDirectory() as d:
-            kit.generar(tabla, d, pines_max2=[26, 28, 81, 77])
-            with open(os.path.join(d, "fpga", "circuito.qsf"), encoding="utf-8") as f:
-                texto = f.read()
+        armado = kit.armar(tabla, pines={
+            "max2": [26, 28, 81, 77],
+            "uno_nano": leer_pines("2, 3, a0 13", placas.ARDUINO["uno_nano"]),
+            "pic16f628a": leer_pines("ra0 ra1 rb5 rb4", placas.PIC["pic16f628a"]),
+        })
+        qsf = armado.archivos["fpga/circuito.qsf"]
         for linea in ("PIN_26 -to A", "PIN_28 -to B", "PIN_81 -to Y_AND", "PIN_77 -to Y_OR"):
-            self.assertIn("set_location_assignment " + linea, texto)
+            self.assertIn("set_location_assignment " + linea, qsf)
+        uno = armado.archivos["arduino/uno_nano/uno_nano.ino"]
+        self.assertIn("const uint8_t PIN_Y_AND = A0;", uno)
+        self.assertIn("const uint8_t PIN_Y_OR = 13;", uno)
+        pic = armado.archivos["pic/pic16f628a.c"]
+        self.assertIn("if (PORTAbits.RA1) x |= 0x01;   // B", pic)
+        self.assertIn("PORTB = (uint8_t)((out_Y_AND << 5) | (out_Y_OR << 4));", pic)
+        # las placas sin pines propios siguen con su reparto de siempre
+        self.assertIn("PIN_A = 32;", armado.archivos["esp32/esp32_wroom32/esp32_wroom32.ino"])
 
-    def test_max2_rechaza_patas_que_no_son_de_usuario(self):
+    def test_pines_que_no_sirven_dicen_por_que(self):
         c = Circuito(TruthTable(2, outputs={"Y": [0, 1, 1, 0]}))
-        for malas, motivo in (([26, 28, 9], "alimentacion"),      # VCCIO1
-                              ([26, 28, 22], "JTAG"),             # TMS
-                              ([26, 28, 12], "GCLK0"),
-                              ([26, 26, 33], "repite"),
-                              ([26, 28], "hacen falta 3")):
+        max2, wroom = placas.EPM240, placas.ESP32["esp32_wroom32"]
+        for placa, malos, motivo in ((max2, [26, 28, 9], "alimentacion"),   # VCCIO1
+                                     (max2, [26, 28, 22], "JTAG"),          # TMS
+                                     (max2, [26, 28, 12], "GCLK0"),
+                                     (max2, [26, 26, 33], "repite"),
+                                     (max2, [26, 28], "hacen falta 3"),
+                                     (wroom, [32, 33, 7], "no es utilizable"),  # flash
+                                     (wroom, [32, 33, 34], "solo sirve de entrada")):
             with self.assertRaises(ValueError) as e:
-                kit.max2_con_pines(c, malas)
-            self.assertIn(motivo, str(e.exception), malas)
+                con_pines(c, placa, malos)
+            self.assertIn(motivo, str(e.exception), malos)
+        with self.assertRaises(ValueError):
+            leer_pines("26, veintiocho", max2)
+        with self.assertRaises(ValueError):
+            kit.armar(TruthTable(2, outputs={"Y": [0, 1, 1, 0]}), pines={"zx81": [1, 2, 3]})
+
+    def test_el_documento_trae_el_kit(self):
+        from ktool.render.report import Options, build_report
+        tabla = TruthTable(2, outputs={"Y": [0, 1, 1, 0]})
+        html = build_report(tabla, Options(kit=True, kit_pines={"max2": [26, 28, 33]}))
+        self.assertIn("<h2>Kit de hardware</h2>", html)
+        self.assertIn("Pines: Intel/Altera MAX II EPM240T100C5", html)
+        self.assertIn("<code>fpga/circuito.vhd</code>", html)
+        self.assertNotIn("<h2>Kit de hardware</h2>", build_report(tabla, Options()))
 
     def test_la_max_ii_solo_usa_io_de_usuario(self):
         no_io = {9, 10, 11, 12, 13, 14, 22, 23, 24, 25, 31, 32, 43, 44, 45, 46,

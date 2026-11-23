@@ -143,7 +143,8 @@ ktool -h                                  # ayuda completa
 | `--gates-only` | Sólo compuertas (apaga K-map y tabla). |
 | `--text` | Sólo imprime las ecuaciones en la terminal. |
 | `--hw carpeta` | Escribe el [kit de hardware](#kit-de-hardware): el circuito como código para cada placa de abajo. |
-| `--max2-pines 26,28,33` | Con `--hw`: en qué patas de la MAX II va cada señal, primero las entradas. Para placas con LEDs o botones en patas fijas. |
+| `--pines max2=26,28,33` | Con `--hw`: qué pines usa una placa, primero las entradas. Se repite para varias placas (`max2`, `uno_nano`, `pic18f45k50`, `esp32_wroom32`, `pico`...). `--max2-pines` es el atajo para la MAX II. |
+| `--kit-en-documento` | Mete el kit de hardware (tablas de pines y cada archivo) dentro del documento HTML. |
 | `--out archivo.html` / `--open` / `--title "..."` | Dónde va el documento, si se abre, y su título. |
 
 ### Sintaxis de expresiones
@@ -166,10 +167,26 @@ ktool gui
 ```
 
 Una tabla al estilo de los solucionadores clásicos. Arriba eliges el número de
-variables y de salidas, activas la columna de notas, y escoges la forma (SOP,
-POS, auto o ambas). La barra de expresión llena una columna entera evaluando lo
-que escribas. *Ecuaciones* muestra el resultado en el panel de abajo y *Generar
-documento* arma el HTML.
+entradas y de salidas, activas la columna de notas, y escoges la forma (auto,
+SOP, POS, solo NAND, solo NOR o ambas). La barra de expresión llena una columna
+entera evaluando lo que escribas.
+
+Todo lo que sale de la tabla vive en el panel **Resultados** de abajo, en cinco
+pestañas que leen la misma tabla y la misma forma:
+
+| pestaña | qué hace |
+|---|---|
+| *Ecuaciones* | Todas las formas con su costo, y la más barata. Se actualiza sola al volver a ella. |
+| *Portada* | Título, autor, organización, materia, profesor, secuencia, fecha, revisó y autorizó. Sale como portada formal con líneas de firma; lo vacío no aparece. |
+| *Generar* | Una lista **Contiene** palomeable (portada, tabla, mapas, circuitos, lenguajes, armado, kit) y lo que además se guarda en la carpeta (el armado aparte, la carpeta del kit, el proyecto). Un clic en *Generar todo* lo escribe todo. |
+| *Protoboard* | El armado físico: qué chips (fiel al diagrama, solo los que tienes, o automático), qué va en las salidas (LEDs, displays de 7 o 16 segmentos), una protoboard por salida o una para todo. |
+| *Kit de hardware* | Escribe la carpeta del [kit de hardware](#kit-de-hardware). Si tu placa trae LEDs en pines fijos, eliges la placa y escribes sus pines; cada placa recuerda los suyos. |
+
+El menú *Armado* lleva directo a *Protoboard* y a *Kit de hardware*.
+
+**Proyectos y ejemplos.** *Archivo* guarda y abre todo (tabla, nombres, portada y las opciones de cada pestaña) como `.ktool.json`. Cada pocos segundos se guarda una copia, y lo que descartas sin guardar va a una papelera de la que se recupera. *Archivo > Ejemplos* trae 24 circuitos listos: multiplexor, demultiplexor, decodificadores, codificador de prioridad, BCD y hexadecimal a 7 segmentos, sumadores, restadores, comparador, Gray, complemento a 2, exceso-3 y los ejercicios de las prácticas.
+
+**Entradas con nombre.** Clic en el encabezado de una entrada para renombrarla (`SEL`, `D0`, `EN`): el nombre llega a ecuaciones, mapas, documento, armado y código. Con nombres largos los productos se escriben separados (`SEL' D0`), y un nombre que no compilaría en VHDL, Verilog o C se rechaza en el momento.
 
 Llenar la tabla rápido es la parte que de verdad se diseñó:
 
@@ -179,10 +196,9 @@ Llenar la tabla rápido es la parte que de verdad se diseñó:
 | Poner toda la selección | <kbd>1</kbd>, <kbd>0</kbd> o <kbd>x</kbd> cambia todas las celdas elegidas de un golpe. |
 | Ciclar una celda | Doble clic: `0 → 1 → x`. |
 | Copiar y pegar | <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd>/<kbd>X</kbd>, en formato que Excel entiende. |
-| Renombrar una salida | Clic en su encabezado. |
+| Renombrar una entrada o salida | Clic en su encabezado. |
 
-El menú *Ayuda* trae la guía rápida, la lista de atajos y el enlace al
-repositorio.
+El menú *Ayuda* trae la guía rápida, una guía por tema, la lista de atajos, la versión (*Acerca de*) y el enlace al repositorio.
 
 ## Qué sale
 
@@ -276,7 +292,7 @@ ktool -n 4 -m 0,1,2,5 --form nand --hw kit_nand    # en la forma que pidas
 | **STM32** Blue Pill | Un sketch para STM32duino. Las entradas van en pines tolerantes a 5 V. |
 | **Raspberry Pi Pico** | MicroPython con los pull-down internos puestos. |
 | **VHDL y Verilog** | Fuentes sintetizables, y **un banco de prueba en cada uno** que recorre todas las combinaciones contra la tabla de verdad. |
-| **MAX II EPM240T100C5** | Un proyecto de Quartus Prime (`.qpf` + `.qsf`) solo con pines de I/O de usuario. `--max2-pines` pone cada señal en la pata que tu placa necesita, y rechaza las de alimentación, tierra y JTAG. |
+| **MAX II EPM240T100C5** | Un proyecto de Quartus Prime (`.qpf` + `.qsf`) solo con pines de I/O de usuario. `--pines max2=...` pone cada señal en la pata que tu placa necesita, y rechaza las de alimentación, tierra y JTAG. |
 | **GAL22V10** | Un `.pld` de WinCUPL, con cada salida en una macrocelda con lugar para sus términos producto. |
 | **Chips 74LS** | La lista de materiales («1× 74LS00, 2 compuertas usadas de 4») y cada cable, pata por pata. |
 | **Python** | Un script autónomo que imprime la tabla de verdad de las ecuaciones y la compara con la tuya. |
@@ -299,6 +315,13 @@ drenador abierto de RA4. Solo se usan cuando ya no queda otro, y en ese caso la
 tabla de pines lleva el aviso junto a ellos.
 
 **Cómo se comprobó.** Cada archivo pasó por la herramienta real de su plataforma, sobre 21 circuitos generados (de 2 a 6 entradas, de 1 a 24 salidas, en todas las formas, incluidos los peores casos de memoria): **88 archivos de PIC** compilados con XC8 v3.10 sin errores ni advertencias; **21 sketches de Arduino** (Uno o Mega) compilados con `arduino-cli`, y **31 sketches de ESP32 (WROOM-32, S3, C3) y Blue Pill** de una muestra de 8 circuitos; **42 bancos de prueba** corridos en GHDL (VHDL) e Icarus Verilog, con todas las combinaciones iguales a la tabla de verdad; y las 21 simulaciones en Python. Encima, las pruebas revisan la lógica de cada salida (la ecuación en C, las máscaras del PIC, el archivo de MicroPython corrido con un `machine` de mentira) fila por fila en unas 150 tablas al azar. El detalle está en [docs/HARDWARE.md](docs/HARDWARE.md).
+
+**También en la ventana.** La pestaña *Kit de hardware* escribe el kit de la tabla
+que tienes en pantalla. Es la forma de sacar **varias salidas**, que la línea de
+comandos no permite. Los pines fijos sirven para **cualquier placa** de la lista,
+no solo la MAX II, y la pestaña *Documento* puede meter el kit completo (tablas de
+pines y cada archivo) dentro del HTML. Desde la terminal:
+`--pines max2=26,28,33 --pines uno_nano=2,3,8` y `--kit-en-documento`.
 
 Por ahora solo circuitos **combinacionales**. Las máquinas de estado, con reloj y
 reset, llegan con el Release 3.

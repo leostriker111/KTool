@@ -13,6 +13,8 @@ Ejemplos:
 Kit de hardware (codigo para PIC, ESP32, Arduino, STM32, Pico, FPGA, GAL y 74LS):
     ktool -e "A'B + C" --hw kit
     ktool -n 4 -m 0,1,2,5 --form nand --hw kit_nand
+    ktool -e "A'B + C" --hw kit --pines max2=26,28,33,73 --pines uno_nano=2,3,8,9
+    ktool -e "A'B + C" --proto --kit-en-documento --out todo.html
 
 Armado en protoboard (BETA):
     ktool -n 3 -m 1,4,5,6 -d 2,7 --proto --out salida.html
@@ -112,10 +114,16 @@ def _build_parser():
                    help="generar el kit de hardware en CARPETA: codigo para PIC, ESP32, "
                         "Arduino, STM32, Pico, VHDL/Verilog con banco de prueba, MAX II, "
                         "GAL22V10, chips 74LS y una simulacion en Python")
+    p.add_argument("--pines", metavar="PLACA=LISTA", action="append",
+                   help="con --hw o --kit-en-documento: los pines de una placa, primero las "
+                        "entradas y luego las salidas (ej: max2=26,28,33,73 o "
+                        "uno_nano=2,3,8). Se repite para varias placas. Para placas con "
+                        "LEDs o botones en pines fijos")
     p.add_argument("--max2-pines", metavar="LISTA",
-                   help="con --hw: las patas de la MAX II EPM240 en que va cada senal, "
-                        "primero las entradas y luego las salidas (ej: 26,28,33,73). "
-                        "Para placas que traen LEDs o botones en patas fijas")
+                   help="atajo de --pines max2=LISTA")
+    p.add_argument("--kit-en-documento", action="store_true",
+                   help="incluir en el documento HTML el kit de hardware: la tabla de "
+                        "pines y el codigo de cada placa")
     p.add_argument("--text", action="store_true", help="solo imprimir ecuaciones en la terminal")
     p.add_argument("--out", help="ruta del documento HTML a generar")
     p.add_argument("--open", action="store_true", help="abrir el documento en el navegador")
@@ -188,15 +196,29 @@ def _print_text(table):
                 print(f"  {d['term']:<14} -> {', '.join(d['outputs'])}")
 
 
-def _generar_kit(table, carpeta, forma, pines_max2=None):
+def _pines_de_args(args):
+    """--pines PLACA=LISTA (repetible) y --max2-pines -> {placa: [pines]}."""
+    from .hw import placas
+    from .hw.modelo import leer_pines
+    pedidos = list(args.pines or [])
+    if args.max2_pines:
+        pedidos.append("max2=" + args.max2_pines)
+    pines = {}
+    for pedido in pedidos:
+        nombre, _, lista = pedido.partition("=")
+        nombre = nombre.strip().lower()
+        if not lista.strip():
+            raise ValueError(f"--pines va como PLACA=LISTA, ej. max2=26,28,33: {pedido!r}")
+        if nombre not in placas.PLACAS_CON_PINES:
+            raise ValueError(f"no conozco la placa {nombre!r}. Las que aceptan pines: "
+                             + ", ".join(placas.PLACAS_CON_PINES))
+        pines[nombre] = leer_pines(lista, placas.PLACAS_CON_PINES[nombre])
+    return pines
+
+
+def _generar_kit(table, carpeta, forma, pines):
     """Escribe el kit y dice, plataforma por plataforma, que salio y que no."""
     from .hw import kit
-    pines = None
-    if pines_max2:
-        try:
-            pines = [int(p) for p in pines_max2.replace(",", " ").split()]
-        except ValueError:
-            raise SystemExit(f"--max2-pines lleva numeros de pata, ej. 26,28,33: {pines_max2!r}")
     try:
         resumen = kit.generar(table, carpeta, forma, pines)
     except ValueError as e:
@@ -249,11 +271,15 @@ def main(argv=None):
     except ValueError as e:
         raise SystemExit(str(e))
 
+    try:
+        pines = _pines_de_args(args)
+    except ValueError as e:
+        raise SystemExit(str(e))
     if args.hw:
-        _generar_kit(table, args.hw, args.form, args.max2_pines)
+        _generar_kit(table, args.hw, args.form, pines)
         return
-    if args.max2_pines:
-        raise SystemExit("--max2-pines va junto con --hw")
+    if pines and not args.kit_en_documento:
+        raise SystemExit("--pines y --max2-pines van con --hw o con --kit-en-documento")
 
     if args.text:
         _print_text(table)
@@ -277,8 +303,13 @@ def main(argv=None):
         proto_extremos=args.proto_extremos,
         proto_separado=args.proto_separado,
         proto_color_salidas=args.proto_color_salidas,
+        kit=args.kit_en_documento,
+        kit_pines=pines,
     )
-    html = build_report(table, opt)
+    try:
+        html = build_report(table, opt)
+    except ValueError as e:   # un pin o un nombre que no sirve para el kit
+        raise SystemExit(str(e))
     open_it = args.open or (args.out is None)
     path = save_report(html, args.out, open_browser=open_it)
     print(f"documento generado: {path}")

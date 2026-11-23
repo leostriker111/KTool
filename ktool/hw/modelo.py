@@ -258,6 +258,65 @@ def asignar_pines(circuito, placa):
     return renglones
 
 
+def leer_pines(texto, placa):
+    """'26, 28 33' -> [26, 28, 33]; 'rb0,RB1' -> ['RB0', 'RB1'].
+
+    Cada placa nombra sus pines a su modo: numeros en ESP32, Pico y la MAX II,
+    nombres de puerto en los PIC y la Blue Pill, y '13'/'A0' en Arduino (que se
+    guardan como texto). Se lee al tipo que usa la placa.
+    """
+    numericos = all(isinstance(p, int) for p in placa["entradas"] + placa["salidas"])
+    pines = []
+    for ficha in texto.replace(",", " ").split():
+        if numericos:
+            if not ficha.isdigit():
+                raise ValueError(f"en {placa['titulo']} los pines son numeros: {ficha!r}")
+            pines.append(int(ficha))
+        else:
+            pines.append(ficha.upper())
+    return pines
+
+
+def con_pines(circuito, placa, pines):
+    """La placa con los pines que pide el usuario: primero las entradas, en
+    orden, y luego las salidas.
+
+    Para las placas de practica, que traen LEDs y botones en pines fijos. Cada
+    pin se revisa contra los utilizables de esa placa (los mismos de placas.py:
+    nada de la flash del ESP32, de VCC/GND/JTAG de la MAX II, del PGC/PGD que no
+    este de reserva...), y una salida no puede ir en un pin que solo es
+    entrada. Lanza ValueError con el motivo; el aviso de un pin de reserva se
+    conserva en la tabla de pines.
+    """
+    utilizables = list(dict.fromkeys(placa["entradas"] + placa["salidas"]))
+    especiales = placa.get("pines_especiales", {})
+    for p in pines:
+        if p in especiales:
+            raise ValueError(f"el pin {p} de {placa['titulo']} es {especiales[p]}. Usa otro")
+        if p not in utilizables:
+            fuera = f" ({placa['pines_fuera']})" if placa.get("pines_fuera") else ""
+            # numeros en orden; los nombres (RB0, PA3, A0) en el orden de la placa
+            lista = sorted(utilizables) if isinstance(p, int) else utilizables
+            raise ValueError(
+                f"el pin {p} no es utilizable en {placa['titulo']}{fuera}. Los que si: "
+                + ", ".join(str(x) for x in lista))
+    if len(set(pines)) != len(pines):
+        raise ValueError(f"la lista de pines de {placa['titulo']} repite un pin")
+    ne, ns = circuito.n_entradas, circuito.n_salidas
+    if len(pines) != ne + ns:
+        raise ValueError(
+            f"para {placa['titulo']} diste {len(pines)} pines y el circuito tiene {ne} "
+            f"entradas ({', '.join(circuito.entradas)}) y {ns} salidas "
+            f"({', '.join(circuito.salidas)}): hacen falta {ne + ns}, primero las entradas")
+    for p in pines[ne:]:
+        if p in placa.get("solo_entrada", []):
+            raise ValueError(f"el pin {p} de {placa['titulo']} solo sirve de entrada")
+    propia = dict(placa)
+    propia["entradas"] = list(pines[:ne])
+    propia["salidas"] = list(pines[ne:])
+    return propia
+
+
 def tabla_de_pines(renglones, comentario, pata=None):
     """La tabla de mapeo como comentario del lenguaje (`//`, `--`, `#`, `/*`).
 

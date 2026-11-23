@@ -2,6 +2,23 @@
 
 ## Sin publicar
 
+- Fase 1, proyecto: Archivo > Nuevo / Abrir / Guardar / Guardar como (.ktool.json, mismo
+  formato que la rama beta), autoguardado cada 5 s y papelera recuperable; Archivo > Ejemplos
+  (mux, demux, decodificadores, prioridad, BCD y hex a 7 seg, sumadores, restadores, comparador,
+  Gray, complemento a 2, exceso-3 y los de las practicas). Entradas renombrables (clic en el
+  encabezado) que llegan a todo; con nombres largos los productos van separados (SEL' D0).
+  Pestana Portada (titulo, autor, organizacion, materia, profesor, secuencia, fecha, reviso,
+  autorizo) con portada formal y firmas en el documento; pestana Generar con la lista
+  'Contiene' y un solo 'Generar todo'. Ejemplos dentro de los cuadros; Ayuda con guias y version.
+- GUI: todo lo que sale de la tabla vive ahora en el panel **Resultados**, en cuatro pestanas
+  que leen la misma tabla y la misma forma: Ecuaciones (se actualiza sola), Documento (una
+  casilla por seccion, todas marcadas: el documento trae todo), Protoboard (el armado fisico,
+  que antes solo existia en la CLI) y Kit de hardware. Nuevo menu **Armado**. La forma ya
+  ofrece solo NAND y solo NOR, y los encabezados de salida ya no se cortan.
+- Pines fijos para **cualquier placa** del kit, no solo la MAX II: `--pines PLACA=LISTA`
+  (repetible) en la CLI y la placa a elegir en la ventana. `--max2-pines` sigue como atajo.
+- El documento puede traer el **kit de hardware** completo (tablas de pines y cada archivo,
+  con boton de copiar): `--kit-en-documento` o la casilla de la pestana Documento.
 - Nuevo: **kit de hardware** (`--hw CARPETA`). El circuito minimizado como codigo completo
   para PIC (18F4550, 18F45K50, 16F877A, 16F628A, 16F84A, con XC8), ESP32 (WROOM-32, S3 y C3,
   en Arduino y en MicroPython), Arduino Uno/Nano o Mega, Blue Pill (STM32duino), Raspberry Pi

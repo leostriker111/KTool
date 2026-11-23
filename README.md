@@ -140,7 +140,8 @@ ktool -h                                  # full help
 | `--gates-only` | Gates only (turns off K-map and table). |
 | `--text` | Just print the equations to the terminal. |
 | `--hw folder` | Write the [hardware kit](#hardware-kit): the circuit as code for every board below. |
-| `--max2-pines 26,28,33` | With `--hw`: which MAX II pins to use, inputs first. For boards with LEDs or buttons on fixed pins. |
+| `--pines max2=26,28,33` | With `--hw`: which pins a board uses, inputs first. Repeat it for several boards (`max2`, `uno_nano`, `pic18f45k50`, `esp32_wroom32`, `pico`...). `--max2-pines` is a shortcut for the MAX II. |
+| `--kit-en-documento` | Put the hardware kit (pin tables and every file) inside the HTML document. |
 | `--out file.html` / `--open` / `--title "..."` | Where the document goes, whether to open it, and its title. |
 
 ### Expression syntax
@@ -163,10 +164,26 @@ ktool gui
 ```
 
 A table in the style of the classic solvers. Along the top you pick the number of
-variables and outputs, turn on the notes column, and choose the form (SOP, POS,
-auto or both). The expression bar fills a whole column by evaluating whatever you
-type. *Ecuaciones* shows the result in the lower panel and *Generar documento*
-builds the HTML.
+inputs and outputs, turn on the notes column, and choose the form (auto, SOP,
+POS, NAND only, NOR only, or both). The expression bar fills a whole column by
+evaluating whatever you type.
+
+Everything that comes out of the table lives in the **Resultados** panel at the
+bottom, in five tabs that read the same table and the same form:
+
+| tab | what it does |
+|---|---|
+| *Ecuaciones* | Every form with its cost, and the cheapest. Refreshes itself when you come back to it. |
+| *Portada* | Title, author, organisation, course, teacher, group, date, reviewed by and approved by. They become a formal cover page with signature lines; empty fields are left out. |
+| *Generar* | A **Contains** list to tick (cover, table, maps, circuits, languages, build, kit) plus what else goes in the folder (the build on its own, the kit folder, the project). One click on *Generar todo* writes it all. |
+| *Protoboard* | The physical build: which chips (faithful to the diagram, only the ones you own, or automatic), what goes on the outputs (LEDs, 7- or 16-segment displays), one board per output or one for all. |
+| *Kit de hardware* | Writes the [hardware kit](#hardware-kit) folder. If your board has LEDs on fixed pins, pick the board and type its pins; each board remembers its own. |
+
+The *Armado* menu jumps straight to *Protoboard* and *Kit de hardware*.
+
+**Projects and examples.** *Archivo* saves and opens the whole thing (table, names, cover, every tab's options) as a `.ktool.json`. A copy is saved every few seconds, and anything discarded unsaved goes to a recycle bin you can restore from. *Archivo > Ejemplos* has 24 ready circuits: multiplexer, demultiplexer, decoders, priority encoder, BCD and hex to 7 segments, adders, subtractors, comparator, Gray, two's complement, excess-3, and the exercises from the course labs.
+
+**Named inputs.** Click an input header to rename it (`SEL`, `D0`, `EN`): the name reaches equations, maps, document, build and code. Products with long names are written apart (`SEL' D0`), and a name that wouldn't compile in VHDL, Verilog or C is refused on the spot.
 
 Filling a table in fast is the part that was actually designed:
 
@@ -176,9 +193,9 @@ Filling a table in fast is the part that was actually designed:
 | Set the whole selection | <kbd>1</kbd>, <kbd>0</kbd> or <kbd>x</kbd> changes every selected cell at once. |
 | Cycle one cell | Double-click: `0 → 1 → x`. |
 | Copy in and out | <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd>/<kbd>X</kbd>, in a format Excel understands. |
-| Rename an output | Click its column header. |
+| Rename an input or output | Click its column header. |
 
-The *Ayuda* menu has the quick guide, the shortcut list, and a link back here.
+The *Ayuda* menu has the quick guide, a guide per topic, the shortcut list, the version (*Acerca de*) and a link back here.
 
 ## What comes out
 
@@ -271,7 +288,7 @@ ktool -n 4 -m 0,1,2,5 --form nand --hw kit_nand    # the form you ask for
 | **STM32** Blue Pill | A sketch for STM32duino. The inputs sit on 5 V-tolerant pins. |
 | **Raspberry Pi Pico** | MicroPython with the internal pull-downs on. |
 | **VHDL and Verilog** | Synthesisable sources, and a **test bench in each** that sweeps every input combination against the truth table. |
-| **MAX II EPM240T100C5** | A Quartus Prime project (`.qpf` + `.qsf`) with user I/O pins only. `--max2-pines` puts each signal on the pin your board needs, and refuses power, ground and JTAG pins. |
+| **MAX II EPM240T100C5** | A Quartus Prime project (`.qpf` + `.qsf`) with user I/O pins only. `--pines max2=...` puts each signal on the pin your board needs, and refuses power, ground and JTAG pins. |
 | **GAL22V10** | A WinCUPL `.pld`, with each output placed in a macrocell big enough for its product terms. |
 | **74LS chips** | The bill of materials ("1× 74LS00, 2 gates used of 4") and every jumper, pin to pin. |
 | **Python** | A standalone script that prints the truth table of the equations and checks it against yours. |
@@ -294,6 +311,13 @@ drain. They are only used when nothing else is left, and the pin table then
 carries a warning next to them.
 
 **How it was checked.** Every file was put through the real tool for its platform, on 21 generated circuits (2 to 6 inputs, 1 to 24 outputs, every form, the worst cases for memory included): **88 PIC files** compiled with XC8 v3.10 with no errors or warnings; **21 Arduino sketches** (Uno or Mega) compiled with `arduino-cli`, and **31 ESP32 (WROOM-32, S3, C3) and Blue Pill sketches** from a sample of 8 circuits; **42 test benches** run in GHDL (VHDL) and Icarus Verilog, every combination matching the truth table; and the 21 Python simulations. On top of that the test suite checks the logic of each output (the C equation, the PIC's bit masks, the MicroPython file run against a fake `machine` module) row by row on about 150 random tables. Details in [docs/HARDWARE.md](docs/HARDWARE.md).
+
+**In the window too.** The *Kit de hardware* tab writes the kit for the table on
+screen. That is the way to get **several outputs**, which the command line can't
+take. Fixed pins work for **any board** in the list, not just the MAX II, and the
+*Documento* tab can put the whole kit (pin tables and every file) inside the HTML.
+From the command line: `--pines max2=26,28,33 --pines uno_nano=2,3,8` and
+`--kit-en-documento`.
 
 Only **combinational** circuits for now. State machines, with clock and reset,
 arrive with Release 3.

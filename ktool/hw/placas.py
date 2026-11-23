@@ -267,6 +267,36 @@ EPM240 = {
     "salidas": EPM240_BANCO_2 + EPM240_BANCO_1,
     "reserva": {},
     "solo_entrada": [],
+    # Para los mensajes cuando el usuario elige sus propias patas. Las
+    # especiales tambien son I/O, pero se dejan libres para los relojes y el
+    # reset de los disenos secuenciales.
+    "pines_especiales": {
+        12: "GCLK0, que ktool deja libre para los relojes",
+        14: "GCLK1, que ktool deja libre para los relojes",
+        62: "GCLK2, que ktool deja libre para los relojes",
+        64: "GCLK3, que ktool deja libre para los relojes",
+        43: "DEV_OE, que ktool deja libre para el reset",
+        44: "DEV_CLRn, que ktool deja libre para el reset",
+    },
+    "pines_fuera": "es de alimentacion, tierra o JTAG",
+}
+
+# Todas las placas que aceptan pines elegidos por el usuario, con el nombre
+# corto que se usa en la CLI (--pines uno_nano=2,3,8) y en la ventana.
+PLACAS_CON_PINES = {
+    "pic18f4550": PIC["pic18f4550"],
+    "pic18f45k50": PIC["pic18f45k50"],
+    "pic16f877a": PIC["pic16f877a"],
+    "pic16f628a": PIC["pic16f628a"],
+    "pic16f84a": PIC["pic16f84a"],
+    "esp32_wroom32": ESP32["esp32_wroom32"],
+    "esp32_s3": ESP32["esp32_s3"],
+    "esp32_c3": ESP32["esp32_c3"],
+    "uno_nano": ARDUINO["uno_nano"],
+    "mega2560": ARDUINO["mega2560"],
+    "bluepill": BLUEPILL,
+    "pico": PICO,
+    "max2": EPM240,
 }
 
 # GAL22V10: 24 patas. 1 = CLK/I0, 2-11 y 13 = entradas, 14-23 = macroceldas.
