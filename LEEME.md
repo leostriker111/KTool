@@ -325,8 +325,7 @@ tabla de pines lleva el aviso junto a ellos.
 
 Todo eso se guarda en el proyecto, y el documento lo describe tal cual: las placas, el dibujo del componente con sus patas asignadas, los ajustes y los archivos (con los editados marcados). Así, aunque el kit se escriba primero como archivos sueltos, el reporte final dice exactamente lo que se grabó. Desde la terminal: `--pines max2=26,28,33 --pines uno_nano=2,3,8` y `--kit-en-documento`.
 
-El kit de hardware es para circuitos **combinacionales**. Las máquinas de estado
-tienen su propia sección, abajo.
+Las máquinas de estado tienen su propio kit, en la sección de abajo.
 
 ## Máquinas de estado y contadores
 
@@ -357,6 +356,8 @@ prueba generado revisa cualquiera de ellos, ciclo por ciclo.
 En la ventana, el menú *Secuencial* abre el editor de máquinas (estados y
 transiciones en tablas, con el grafo en vivo) y un diálogo *Contador…*. *Archivo >
 Ejemplos > Contadores* trae ya armados los contadores de la práctica.
+
+**El kit de la máquina.** El botón *Kit de hardware…* del editor abre la misma ventana del kit, con la máquina: PIC 18F en C y en ensamblador (el siguiente estado por tabla), Arduino con `delay()` o `millis()`, y la MAX II con el divisor del reloj de 50 MHz a la frecuencia elegida, el reset con su polaridad y el reloj en una pata GCLK. La frecuencia se pone en *Ajustes* o con la calculadora. Con *Kit en el reporte* palomeado, el documento trae el kit y el cálculo del reloj de cada placa con su onda. Se comprobó con las 10 máquinas: 40 programas de PIC en C y 40 en ensamblador, 40 sketches de Arduino y 120 simulaciones del nivel superior de la MAX II en GHDL, comparadas ciclo por ciclo, sin una advertencia.
 
 **Cómo se comprobó.** Los 8 contadores de la práctica y 2 máquinas más, cada uno
 por los 3 métodos y con los 4 tipos de flip-flop: **60 simulaciones en GHDL** en

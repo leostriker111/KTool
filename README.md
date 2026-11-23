@@ -321,8 +321,7 @@ carries a warning next to them.
 
 All of it is saved in the project, and the document describes it as it is: the boards, the drawing of the part with its assigned pins, the settings and the files (hand-edited ones are marked). So even when the kit is written out as loose files first, the final report says exactly what was flashed. From the command line: `--pines max2=26,28,33 --pines uno_nano=2,3,8` and `--kit-en-documento`.
 
-The hardware kit covers **combinational** circuits. State machines have their
-own section, below.
+State machines have a kit of their own, in the section below.
 
 ## State machines and counters
 
@@ -351,6 +350,8 @@ entity, so one generated test bench checks any of them, cycle by cycle.
 In the window, the *Secuencial* menu opens the state-machine editor (states and
 transitions as tables, with a live graph) and a *Contador…* dialog. *Archivo >
 Ejemplos > Contadores* has the counters from the lab already set up.
+
+**The machine's kit.** The editor's *Kit de hardware…* button opens the same kit window, with the machine: PIC 18F in C and in assembly (next state by table), Arduino with `delay()` or `millis()`, and the MAX II with the divider from the 50 MHz clock to the chosen frequency, the reset with its polarity and the clock on a GCLK pin. The frequency goes in *Ajustes* or comes from the calculator. With *Kit en el reporte* ticked, the document includes the kit and each board's clock calculation with its waveform. Checked on the 10 machines: 40 PIC programs in C and 40 in assembly, 40 Arduino sketches and 120 simulations of the MAX II top level in GHDL, compared cycle by cycle, with no warnings.
 
 **How it was checked.** The 8 counters from the lab plus 2 more machines, each
 in the 3 methods and with the 4 flip-flop types: **60 GHDL simulations** in

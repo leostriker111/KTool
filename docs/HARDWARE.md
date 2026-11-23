@@ -177,6 +177,10 @@ familia), `PROJECT_OUTPUT_DIRECTORY output_files` en uno de un EPM240T100C5, y
   de Quartus Prime, pero ninguno de los dos programas estaba instalado para
   pasarles los archivos. Del lado de la MAX II lo que falta es solo eso: el
   VHDL ya está sintetizado y simulado después de la síntesis (arriba).
+- **Salidas Mealy en la MAX II por tabla o por estados.** `vhdl_fsm.por_tabla` y
+  `por_estados` solo escriben salidas Moore: una máquina Mealy con salidas se
+  bloquea en la MAX II salvo con el método de ecuaciones. PIC, Arduino y Python
+  sí la generan.
 - **El planificador de pines de las placas sin hoja oficial.** El orden de los
   cabezales de la Blue Pill y la numeración 1 a 30 de la Nano no aparecen
   escritos en una fuente oficial; están anotados en `hw/encapsulados.py`.
