@@ -2,6 +2,14 @@
 
 ## Sin publicar
 
+- Fase 1, proyecto: Archivo > Nuevo / Abrir / Guardar / Guardar como (.ktool.json, mismo
+  formato que la rama beta), autoguardado cada 5 s y papelera recuperable; Archivo > Ejemplos
+  (mux, demux, decodificadores, prioridad, BCD y hex a 7 seg, sumadores, restadores, comparador,
+  Gray, complemento a 2, exceso-3 y los de las practicas). Entradas renombrables (clic en el
+  encabezado) que llegan a todo; con nombres largos los productos van separados (SEL' D0).
+  Pestana Portada (titulo, autor, organizacion, materia, profesor, secuencia, fecha, reviso,
+  autorizo) con portada formal y firmas en el documento; pestana Generar con la lista
+  'Contiene' y un solo 'Generar todo'. Ejemplos dentro de los cuadros; Ayuda con guias y version.
 - GUI: todo lo que sale de la tabla vive ahora en el panel **Resultados**, en cuatro pestanas
   que leen la misma tabla y la misma forma: Ecuaciones (se actualiza sola), Documento (una
   casilla por seccion, todas marcadas: el documento trae todo), Protoboard (el armado fisico,

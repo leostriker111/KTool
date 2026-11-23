@@ -30,9 +30,21 @@ def complemento(literal):
     return literal[:-1] if literal.endswith("'") else literal + "'"
 
 
+def separador_producto(variables):
+    """Como se pegan los literales de un producto.
+
+    Con letras sueltas (A..F) van juntos, como se escribe a mano: A'BC. Si alguna
+    entrada tiene nombre largo (SEL, D0, EN), juntos no se leen ('SELD0'), asi
+    que van separados por un espacio: SEL' D0. Espacio y no un punto medio: estas
+    ecuaciones tambien salen en comentarios para herramientas viejas (WinCUPL), y
+    el parser de ktool vuelve a leerlas igual (AND implicito).
+    """
+    return " " if any(len(v) > 1 for v in variables) else ""
+
+
 def format_product(pattern, variables):
     lits = term_literals(pattern, variables)
-    return "".join(lits) if lits else "1"
+    return separador_producto(variables).join(lits) if lits else "1"
 
 
 def format_sum(pattern, variables):
@@ -73,7 +85,8 @@ class Solution:
         NAND por termino devuelve la suma de los terminos. Dual para NOR.
         """
         terminos = self.terminos()
-        junta = "".join if self.form == "nand" else lambda xs: " + ".join(xs)
+        junta = (separador_producto(self.variables).join if self.form == "nand"
+                 else lambda xs: " + ".join(xs))
 
         internos = []
         for t in terminos:

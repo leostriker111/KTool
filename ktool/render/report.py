@@ -29,6 +29,7 @@ class Options:
         proto_color_salidas=None,  # None/'arcoiris', o un color fijo (nombre o hex)
         kit=False,          # incluir el kit de hardware: pines y codigo por placa
         kit_pines=None,     # {placa: [pines]} para las placas con pines fijos
+        portada=None,       # {campo: texto} de CAMPOS_PORTADA; None = sin portada
     ):
         self.form = form
         self.kmap = kmap
@@ -45,6 +46,55 @@ class Options:
         self.proto_color_salidas = proto_color_salidas
         self.kit = kit
         self.kit_pines = kit_pines or {}
+        self.portada = portada
+
+
+# Los datos de la portada, en el orden en que salen. La ventana (pestana
+# Portada) y el proyecto (.ktool.json) usan estas mismas claves.
+CAMPOS_PORTADA = [
+    ("titulo", "Titulo"),
+    ("subtitulo", "Practica o tema"),
+    ("autor", "Autor"),
+    ("organizacion", "Organizacion"),
+    ("materia", "Materia"),
+    ("profesor", "Profesor"),
+    ("secuencia", "Secuencia o grupo"),
+    ("fecha", "Fecha"),
+    ("reviso", "Reviso"),
+    ("autorizo", "Autorizo"),
+]
+
+
+def _seccion_portada(datos, titulo_por_omision):
+    """La portada formal: titulo, los datos que se llenaron y las firmas.
+
+    Lo que viene vacio no se escribe. Si hay quien revisa o quien autoriza,
+    van al final con su linea de firma, como en un reporte entregable.
+    """
+    titulo = (datos.get("titulo") or "").strip() or titulo_por_omision
+    partes = ["<div class='portada'>", f"<h1>{_esc(titulo)}</h1>"]
+    if (datos.get("subtitulo") or "").strip():
+        partes.append(f"<p class='subtitulo'>{_esc(datos['subtitulo'].strip())}</p>")
+    filas = [(etiqueta, (datos.get(clave) or "").strip())
+             for clave, etiqueta in CAMPOS_PORTADA
+             if clave not in ("titulo", "subtitulo", "reviso", "autorizo")]
+    filas = [(e, v) for e, v in filas if v]
+    if filas:
+        partes.append("<table class='datos'>")
+        for etiqueta, valor in filas:
+            partes.append(f"<tr><th>{_esc(etiqueta)}</th><td>{_esc(valor)}</td></tr>")
+        partes.append("</table>")
+    firmas = [(etiqueta, (datos.get(clave) or "").strip())
+              for clave, etiqueta in (("reviso", "Reviso"), ("autorizo", "Autorizo"))]
+    firmas = [(e, v) for e, v in firmas if v]
+    if firmas:
+        partes.append("<div class='firmas'>")
+        for etiqueta, nombre in firmas:
+            partes.append(f"<div class='firma'><div class='linea'></div>"
+                          f"<div>{_esc(nombre)}</div><div class='rol'>{_esc(etiqueta)}</div></div>")
+        partes.append("</div>")
+    partes.append("</div>")
+    return "".join(partes)
 
 
 def _seccion_kit(table, opt):
@@ -338,9 +388,13 @@ def build_report(table, opt=None):
         for name, vals in table.outputs.items()
     }
 
-    body = [f"<h1>{_esc(opt.title)}</h1>"]
+    body = []
+    if opt.portada:
+        body.append(_seccion_portada(opt.portada, opt.title))
+    else:
+        body.append(f"<h1>{_esc(opt.title)}</h1>")
     body.append(
-        f"<p class='meta'>{table.nvars} variables "
+        f"<p class='meta'>{table.nvars} entradas "
         f"({', '.join(table.variables)}) &middot; {len(table.outputs)} salida(s)</p>"
     )
     body.append(_GUIDE)
@@ -484,6 +538,9 @@ code{font-family:Consolas,monospace;background:#eef;padding:1px 4px;border-radiu
 .meta{color:#666;}
 table{border-collapse:collapse;margin:8px 0;}
 .tt td,.tt th{border:1px solid #999;padding:3px 9px;text-align:center;font-size:13px;}
+/* Georgia dibuja los numeros al estilo antiguo: A0 se leia 'Ao'. La tabla y los
+   nombres de senal van en una letra de numeros normales. */
+.tt,.meta,.portada .datos td{font-family:'Segoe UI',Arial,sans-serif;}
 .tt th{background:#e8e8e8;}
 .tt .idx{color:#888;} .tt .one{background:#e9f5e9;font-weight:bold;}
 .tt .dc{background:#fff3cd;color:#b8860b;} .tt .note{text-align:left;font-style:italic;}
@@ -512,6 +569,16 @@ table{border-collapse:collapse;margin:8px 0;}
 .copybtn{font-size:11px;border:1px solid #aaa;background:#f3f3f3;border-radius:4px;
   padding:2px 8px;cursor:pointer;}
 .copybtn:hover{background:#e2e8f5;}
+.portada{border-bottom:2px solid #222;padding-bottom:14px;margin-bottom:18px;}
+.portada h1{font-size:28px;margin-bottom:4px;}
+.portada .subtitulo{font-size:17px;color:#444;margin-top:0;}
+.portada .datos th{text-align:left;padding:3px 14px 3px 0;color:#555;font-weight:normal;}
+.portada .datos td{padding:3px 0;}
+.firmas{display:flex;gap:60px;margin-top:40px;}
+.firma{text-align:center;min-width:220px;}
+.firma .linea{border-top:1px solid #222;margin-bottom:4px;}
+.firma .rol{color:#666;font-size:12px;}
+@media print{.copybtn{display:none;} .portada{page-break-after:always;border:none;}}
 """
 
 _CLIP_SCRIPT = """

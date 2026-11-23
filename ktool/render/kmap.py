@@ -40,8 +40,10 @@ def kmap_svg(values, variables, patterns=None, title=None):
     width = left + ncols * CELL + 20
     height = top + nrows * CELL + 20
 
-    row_label = "".join(variables[i] for i in row_vars)
-    col_label = "".join(variables[i] for i in col_vars)
+    # con nombres largos (SEL, D0) las etiquetas van separadas: 'SEL D0', no 'SELD0'
+    pegado = " " if any(len(v) > 1 for v in variables) else ""
+    row_label = pegado.join(variables[i] for i in row_vars)
+    col_label = pegado.join(variables[i] for i in col_vars)
 
     out = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '

@@ -506,7 +506,9 @@ def build_shared_circuit(named_sols, forma="sop"):
     def _texto(g):
         if g["tipo"] == "not":
             return g["lits"][0] + "'"
-        cuerpo = ("".join(g["lits"]) if g["tipo"] in ("and", "nand")
+        # con nombres largos los literales van separados (ver separador_producto)
+        pegado = " " if any(len(l.rstrip("'")) > 1 for l in g["lits"]) else ""
+        cuerpo = (pegado.join(g["lits"]) if g["tipo"] in ("and", "nand")
                   else " + ".join(g["lits"]))
         if g["tipo"] in ("nand", "nor"):
             return f"({cuerpo})'"

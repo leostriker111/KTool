@@ -1,21 +1,34 @@
-"""Interfaz grafica (Tkinter): tabla con seleccion multiple, multiples salidas y notas."""
+"""Interfaz grafica (Tkinter): la tabla de verdad, con entradas y salidas con
+nombre, y el proyecto (.ktool.json) que la guarda junto con todo lo demas.
+
+Lo que sale de la tabla (ecuaciones, documento, armado, kit) vive en el panel
+de abajo, gui/resultados.py; los textos de Ayuda, en gui/ayuda.py.
+"""
 
 from __future__ import annotations
 
+import json
+import os
 import webbrowser
+from datetime import datetime
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, filedialog, simpledialog
 
+from .. import ejemplos
+from .. import io as ktio
 from ..core import table
-from ..core.table import TruthTable, default_vars, MIN_VARS, MAX_VARS, MAX_OUTPUTS
+from ..core.table import TruthTable, default_vars, MIN_VARS, MAX_VARS, MAX_OUTPUTS, VAR_NAMES
 from ..core import ast as expr
+from ..hw.modelo import validar_nombres
 from ..render import codegen
+from . import ayuda
 from .displays import DisplayWidget
-from .resultados import PanelResultados
+from .resultados import PanelResultados, con_ejemplo, nombre_de_archivo
 
 from .. import theme
 
-REPO_URL = "https://github.com/leostriker111/KTool"
+REPO_URL = ayuda.REPO_URL
+AUTOGUARDADO_MS = 5000   # cada cuanto se revisa si hay cambios que autoguardar
 
 CYCLE = {0: 1, 1: "x", "x": 0}
 
@@ -30,32 +43,30 @@ SHORTCUTS = [
     ("Ctrl + X", "Corta (copia y pone 0)"),
     ("Ctrl + A", "Selecciona toda la tabla"),
     ("Esc", "Quita la seleccion"),
-    ("Clic en encabezado de salida", "Renombra la salida"),
+    ("Clic en encabezado", "Renombra esa entrada o salida"),
+    ("Ctrl + N / O / S", "Proyecto nuevo, abrir, guardar"),
+    ("Ctrl + G", "Generar todo (pestana Generar)"),
 ]
-
-GUIDE = (
-    "ktool simplifica logica digital.\n\n"
-    f"1. Elige cuantas variables ({MIN_VARS}-{MAX_VARS}) y cuantas salidas (1-{MAX_OUTPUTS}).\n"
-    "2. Llena la tabla: cada celda cicla 0 -> 1 -> x con doble clic, o\n"
-    "   selecciona varias y presiona 1, 0 o x.\n"
-    "3. Tambien puedes escribir una expresion (ej: A'B + C) y llenar una\n"
-    "   columna evaluandola.\n"
-    "4. 'Forma' (arriba) decide la realizacion: auto (la mas barata), SOP,\n"
-    "   POS, solo NAND o solo NOR. Vale para todo lo de abajo.\n"
-    "5. Abajo, en Resultados, todo sale de la misma tabla:\n"
-    "   - Ecuaciones: todas las formas y la mejor por costo.\n"
-    "   - Documento: el HTML con lo que marques (de entrada, todo).\n"
-    "   - Protoboard: el armado fisico con chips, tablero y cables.\n"
-    "   - Kit de hardware: el codigo para PIC, ESP32, Arduino, STM32, Pico,\n"
-    "     VHDL/Verilog, MAX II, GAL22V10 y 74LS. Si una placa no alcanza,\n"
-    "     dice por que; si tu placa trae LEDs en pines fijos, se los das.\n"
-    "   El menu Armado lleva directo a Protoboard y a Kit de hardware.\n\n"
-    "Renombra una salida haciendo clic en su encabezado."
-)
 
 
 def _default_name(i, k):
     return "Y" if k == 1 else f"Y{i + 1}"
+
+
+def _nombres_de_entrada(actuales, n, salidas):
+    """Los nombres de las n entradas: se conservan los que ya habia y las nuevas
+    toman la primera letra libre (A, B, C...), para no chocar con un nombre ya
+    puesto ni con una salida."""
+    nombres = list(actuales[:n])
+    ocupados = {x.lower() for x in nombres + list(salidas)}
+    candidatos = list(VAR_NAMES) + [f"E{k}" for k in range(MAX_VARS)]
+    for c in candidatos:
+        if len(nombres) == n:
+            break
+        if c.lower() not in ocupados:
+            nombres.append(c)
+            ocupados.add(c.lower())
+    return nombres
 
 
 def _ancho_encabezado(nombre):
@@ -104,6 +115,7 @@ class App:
         self.notes_on = tk.BooleanVar(value=False)
         self.form = tk.StringVar(value="auto")
 
+        self.input_names = default_vars(3)   # A, B, C... renombrables con clic
         self.output_names = ["Y"]
         self.values = []                 # values[oi][row]
         self.cell_widget = {}            # (oi,row) -> Label
@@ -117,22 +129,49 @@ class App:
         self._rebuilding = False
         self.displays = []               # DisplayWidget insertados
 
+        # El proyecto: donde esta guardado y como estaba al guardarlo. "Hay
+        # cambios" es simplemente que lo de ahora no es igual a eso.
+        self._ruta = None
+        self._guardado = None
+        self._autoguardado = None    # ruta de la copia de esta sesion
+        self._ultimo_autoguardado = None
+
         self._build_menu()
         self._build_controls()
         self._build_table_area()
         self._build_bottom()
         self._bind_keys()
         self.rebuild_table()
+        self._guardado = self._instantanea()
+        self._actualizar_titulo()
+        root.protocol("WM_DELETE_WINDOW", self.salir)
+        self._autoguardado = self._nueva_ruta_de_autoguardado()
+        root.after(AUTOGUARDADO_MS, self._revisar_autoguardado)
 
     # ---------- menu ----------
     def _build_menu(self):
         menubar = tk.Menu(self.root)
 
         m_file = tk.Menu(menubar, tearoff=0)
-        m_file.add_command(label="Generar documento...",
-                           command=lambda: self._abrir_y_correr("documento"))
+        m_file.add_command(label="Nuevo", accelerator="Ctrl+N", command=self.nuevo)
+        m_file.add_command(label="Abrir proyecto...", accelerator="Ctrl+O", command=self.abrir)
+        m_file.add_command(label="Guardar", accelerator="Ctrl+S", command=self.guardar)
+        m_file.add_command(label="Guardar como...", command=self.guardar_como)
         m_file.add_separator()
-        m_file.add_command(label="Salir", command=self.root.destroy)
+        # Ejemplos, por tema (ktool/ejemplos.py)
+        m_ejemplos = tk.Menu(m_file, tearoff=0)
+        for grupo, lista in ejemplos.CATALOGO:
+            m_grupo = tk.Menu(m_ejemplos, tearoff=0)
+            for titulo, hacer in lista:
+                m_grupo.add_command(label=titulo, command=lambda f=hacer: self.abrir_ejemplo(f))
+            m_ejemplos.add_cascade(label=grupo, menu=m_grupo)
+        m_file.add_cascade(label="Ejemplos", menu=m_ejemplos)
+        m_file.add_command(label="Recuperar trabajo anterior...", command=self.recuperar)
+        m_file.add_separator()
+        m_file.add_command(label="Generar todo...", accelerator="Ctrl+G",
+                           command=self.generar_todo)
+        m_file.add_separator()
+        m_file.add_command(label="Salir", command=self.salir)
         menubar.add_cascade(label="Archivo", menu=m_file)
 
         m_edit = tk.Menu(menubar, tearoff=0)
@@ -164,10 +203,19 @@ class App:
 
         m_help = tk.Menu(menubar, tearoff=0)
         m_help.add_command(label="Guia rapida", command=self.show_guide)
+        m_guias = tk.Menu(m_help, tearoff=0)
+        for tema, texto in ayuda.GUIAS.items():
+            m_guias.add_command(label=tema,
+                                command=lambda t=tema, x=texto: self._text_window(t, x, 76, 22))
+        m_help.add_cascade(label="Guias", menu=m_guias)
         m_help.add_command(label="Atajos de teclado", command=self.show_shortcuts)
         m_help.add_separator()
         m_help.add_command(label="Repositorio (GitHub)", command=lambda: webbrowser.open(REPO_URL))
         m_help.add_command(label="README", command=lambda: webbrowser.open(REPO_URL + "#readme"))
+        m_help.add_separator()
+        m_help.add_command(label="Acerca de ktool",
+                           command=lambda: self._text_window("Acerca de ktool",
+                                                             ayuda.acerca_de(), 70, 13))
         menubar.add_cascade(label="Ayuda", menu=m_help)
 
         self.root.config(menu=menubar)
@@ -177,7 +225,7 @@ class App:
         bar = ttk.Frame(self.root, padding=8)
         bar.pack(side=tk.TOP, fill=tk.X)
 
-        ttk.Label(bar, text="Variables:").pack(side=tk.LEFT)
+        ttk.Label(bar, text="Entradas:").pack(side=tk.LEFT)
         self.sp_vars = ttk.Spinbox(bar, from_=MIN_VARS, to=MAX_VARS, width=3, textvariable=self.nvars)
         self.sp_vars.pack(side=tk.LEFT, padx=(2, 12))
 
@@ -206,12 +254,13 @@ class App:
         bar2 = ttk.Frame(self.root, padding=(8, 0, 8, 6))
         bar2.pack(side=tk.TOP, fill=tk.X)
         ttk.Label(bar2, text="Expresion:").pack(side=tk.LEFT)
-        self.expr_entry = ttk.Entry(bar2, width=40)
+        self.expr_texto = tk.StringVar()
+        self.expr_entry = ttk.Entry(bar2, width=46, textvariable=self.expr_texto)
         self.expr_entry.pack(side=tk.LEFT, padx=4)
-        self.expr_entry.insert(0, "A'B + C")
+        con_ejemplo(self.expr_entry, self.expr_texto, "Ej. A'B + C   o un numero: b1011, h4D, d77")
         self.expr_entry.bind("<Return>", lambda e: self.fill_from_expr())
         ttk.Label(bar2, text="-> salida:").pack(side=tk.LEFT)
-        self.expr_target = ttk.Combobox(bar2, width=5, state="readonly")
+        self.expr_target = ttk.Combobox(bar2, width=10, state="readonly")
         self.expr_target.pack(side=tk.LEFT, padx=4)
         ttk.Button(bar2, text="Evaluar y llenar", command=self.fill_from_expr).pack(side=tk.LEFT)
         ttk.Label(bar2, text="  traducir a:").pack(side=tk.LEFT)
@@ -220,7 +269,7 @@ class App:
         self.translate_lang.set("Verilog")
         self.translate_lang.pack(side=tk.LEFT, padx=4)
         ttk.Button(bar2, text="Traducir", command=self.translate_expr).pack(side=tk.LEFT)
-        ttk.Label(bar2, text="   expresion (A'B+C) o numero (b1011, h4D, d77) | flechas y Enter navegan | Enter en Salidas aplica",
+        ttk.Label(bar2, text="  Clic en un encabezado: renombrar",
                   foreground="#777").pack(side=tk.LEFT, padx=8)
 
     def _build_table_area(self):
@@ -319,6 +368,11 @@ class App:
             r.bind(f"<{sym}>", self._on_arrow)
         r.bind("<Return>", self._on_enter)
         r.bind("<KP_Enter>", self._on_enter)
+        # el proyecto; funcionan aunque el foco este en un cuadro de texto
+        for tecla, accion in (("n", self.nuevo), ("o", self.abrir), ("s", self.guardar),
+                              ("g", self.generar_todo)):
+            r.bind(f"<Control-{tecla}>", lambda e, f=accion: (f(), "break")[1])
+            r.bind(f"<Control-{tecla.upper()}>", lambda e, f=accion: (f(), "break")[1])
 
     # ---------- navegacion con teclado ----------
     def _dims(self):
@@ -428,8 +482,9 @@ class App:
         except tk.TclError:
             pass
         rows = 1 << n
-        variables = default_vars(n)
         self._sync_names(k)
+        self.input_names = _nombres_de_entrada(self.input_names, n, self.output_names)
+        variables = self.input_names
         self.cursor = None
 
         old = self.values
@@ -452,9 +507,12 @@ class App:
         ttk.Label(self.table_frame, text="#", width=4, anchor="center",
                   relief="solid", borderwidth=1).grid(row=0, column=0, sticky="nsew")
         col = 1
-        for v in variables:
-            ttk.Label(self.table_frame, text=v, width=3, anchor="center",
-                      relief="solid", borderwidth=1).grid(row=0, column=col, sticky="nsew")
+        for vi, v in enumerate(variables):
+            # clic para renombrar, igual que las salidas
+            lbl = tk.Label(self.table_frame, text=v, width=max(3, len(v) + 1), anchor="center",
+                           relief="solid", borderwidth=1, bg="#ececec", cursor="hand2")
+            lbl.grid(row=0, column=col, sticky="nsew")
+            lbl.bind("<Button-1>", lambda e, i=vi: self.rename_input(i))
             col += 1
         out_start = col
         for oi in range(k):
@@ -637,18 +695,45 @@ class App:
                 self._refresh_cell(oi, r)
         self._refresh_displays()
 
-    # ---------- renombrar salida ----------
+    # ---------- renombrar entradas y salidas ----------
+    def _nombre_valido(self, nuevo, entradas, salidas):
+        """Revisa un nombre nuevo contra todo lo que se va a generar con el
+        (VHDL, Verilog, C, CUPL): el mismo filtro que el kit de hardware, aqui
+        mismo, para que el error salga al renombrar y no al generar."""
+        try:
+            validar_nombres(entradas, salidas)
+        except ValueError as e:
+            messagebox.showerror("Ese nombre no sirve", f"{nuevo!r}: {e}")
+            return False
+        return True
+
+    def rename_input(self, vi):
+        """Renombra una entrada. El cambio llega a todo: ecuaciones, mapas,
+        documento, armado y codigo, porque todos leen self.input_names."""
+        actual = self.input_names[vi]
+        nuevo = simpledialog.askstring(
+            "Renombrar entrada", "Nuevo nombre (letras, numeros y _; ej. SEL, D0, EN):",
+            initialvalue=actual, parent=self.root)
+        if not nuevo or not nuevo.strip() or nuevo.strip() == actual:
+            return
+        nuevo = nuevo.strip()
+        entradas = list(self.input_names)
+        entradas[vi] = nuevo
+        if not self._nombre_valido(nuevo, entradas, self.output_names):
+            return
+        self.input_names = entradas
+        self.rebuild_table()
+
     def rename_output(self, oi):
         current = self.output_names[oi]
         new = simpledialog.askstring("Renombrar salida", "Nuevo nombre:",
                                      initialvalue=current, parent=self.root)
-        if not new:
+        if not new or not new.strip() or new.strip() == current:
             return
         new = new.strip()
-        if not new:
-            return
-        if new != current and new in self.output_names:
-            messagebox.showerror("Nombre repetido", f"Ya existe una salida llamada {new!r}.")
+        salidas = list(self.output_names)
+        salidas[oi] = new
+        if not self._nombre_valido(new, self.input_names, salidas):
             return
         self.output_names[oi] = new
         self.out_headers[oi].config(text=new, width=_ancho_encabezado(new))
@@ -658,7 +743,7 @@ class App:
     # ---------- acciones ----------
     def _current_table(self):
         n = max(MIN_VARS, min(MAX_VARS, int(self.nvars.get())))
-        variables = default_vars(n)
+        variables = list(self.input_names[:n])
         outputs = {self.output_names[oi]: list(self.values[oi]) for oi in range(len(self.values))}
         notes = None
         if self.notes_on.get() and self.note_entries:
@@ -671,7 +756,7 @@ class App:
         if not text:
             return
         n = max(MIN_VARS, min(MAX_VARS, int(self.nvars.get())))
-        variables = default_vars(n)
+        variables = list(self.input_names[:n])
         rows = 1 << n
         target = self.expr_target.get()
         oi = self.output_names.index(target)
@@ -690,13 +775,17 @@ class App:
             return
 
         try:
-            # llena una columna de la tabla: las variables son letras sueltas
-            ast = expr.parse(text, letras_sueltas=True)
+            # Con letras sueltas (A..F) pegar dos letras es AND: AB = A AND B.
+            # Con nombres largos (SEL, D0) eso no se puede: van separados por
+            # espacio o por *, y cada nombre se lee completo.
+            sueltas = all(len(v) == 1 for v in variables)
+            ast = expr.parse(text, letras_sueltas=sueltas)
             used = set()
             expr.collect_vars(ast, used)
             unknown = used - set(variables)
             if unknown:
-                raise ValueError(f"variables fuera de A..{variables[-1]}: {', '.join(sorted(unknown))}")
+                raise ValueError(f"no hay entradas llamadas {', '.join(sorted(unknown))}; "
+                                 f"las entradas son {', '.join(variables)}")
         except Exception as e:
             messagebox.showerror("Entrada invalida", str(e))
             return
@@ -726,11 +815,229 @@ class App:
             lines.append("")
         self._text_window(f"Traduccion -> {choice}", "\n".join(lines))
 
-    def _abrir_y_correr(self, pestana):
-        """Desde el menu: abre la pestana de Resultados y corre su accion."""
-        self.resultados.mostrar(pestana)
-        if pestana == "documento":
-            self.resultados.generar_documento()
+    # ---------- proyecto: guardar, abrir, ejemplos, autoguardado ----------
+    #
+    # El proyecto es UN diccionario (serializar) con la tabla, los nombres, la
+    # forma y las opciones de cada pestana; se guarda como .ktool.json (ktool/io.py).
+    # "Hay cambios sin guardar" no se lleva a mano en cada clic: es comparar el
+    # diccionario de ahora contra el que se guardo (_instantanea).
+
+    def serializar(self):
+        n = max(MIN_VARS, min(MAX_VARS, int(self.nvars.get())))
+        notas = []
+        if self.notes_on.get() and self.note_entries:
+            filas = len(self.values[0]) if self.values else 0
+            notas = [self.note_entries[r].get() if r in self.note_entries else ""
+                     for r in range(filas)]
+        fuente = {
+            "doc_type": "table",
+            "nvars": n,
+            "input_names": list(self.input_names[:n]),
+            "output_names": list(self.output_names),
+            "values": [list(col) for col in self.values],
+            "notes_on": bool(self.notes_on.get()),
+            "notes": notas,
+            "form": self.form.get(),
+            "displays": [d.kind for d in self.displays],
+        }
+        fuente.update(self.resultados.a_dict())
+        return fuente
+
+    def aplicar(self, fuente):
+        """Carga un proyecto (o un ejemplo). Lo que falte toma su valor por
+        omision, asi abren igual los archivos de versiones anteriores."""
+        n = int(fuente.get("nvars", 3))
+        salidas = list(fuente.get("output_names") or ["Y"])
+        valores = fuente.get("values") or [[0] * (1 << n) for _ in salidas]
+        self.output_names = salidas
+        self.input_names = list(fuente.get("input_names") or default_vars(n))
+        self.values = [list(col) for col in valores]
+        self.nvars.set(n)
+        self.nouts.set(len(salidas))
+        self.notes_on.set(bool(fuente.get("notes_on", False)))
+        self.form.set(fuente.get("form", "auto"))
+        self.rebuild_table()
+        notas = fuente.get("notes") or []
+        for r, e in self.note_entries.items():
+            if r < len(notas):
+                e.delete(0, tk.END)
+                e.insert(0, notas[r])
+        self.clear_displays()
+        for tipo in fuente.get("displays", []):
+            tipo = tipo.get("kind", "7seg") if isinstance(tipo, dict) else tipo
+            if tipo in ("7seg", "led"):
+                self.insert_display(tipo)
+        self.resultados.desde_dict(fuente)
+        self.resultados.mostrar("ecuaciones")
+        self.resultados.actualizar_ecuaciones()
+
+    def _instantanea(self):
+        return json.dumps(self.serializar(), sort_keys=True)
+
+    def _hay_cambios(self):
+        return self._instantanea() != self._guardado
+
+    def _actualizar_titulo(self):
+        """'Multiplexor 4 a 1 * - ktool': el titulo del proyecto (o el archivo) y
+        un * mientras haya algo sin guardar."""
+        titulo = self.resultados.portada["titulo"].get().strip()
+        nombre = titulo or (os.path.basename(self._ruta) if self._ruta else "Sin titulo")
+        marca = " *" if self._hay_cambios() else ""
+        self.root.title(f"{nombre}{marca} - ktool")
+
+    def _marcar_guardado(self, ruta):
+        self._ruta = ruta
+        self._guardado = self._instantanea()
+        self._actualizar_titulo()
+
+    def guardar(self):
+        if not self._ruta:
+            return self.guardar_como()
+        try:
+            ktio.save(self.serializar(), self._ruta)
+        except OSError as e:
+            messagebox.showerror("No se pudo guardar", str(e))
+            return False
+        self._marcar_guardado(self._ruta)
+        return True
+
+    def guardar_como(self):
+        sugerido = nombre_de_archivo(self.resultados.titulo()) + ktio.EXT
+        ruta = filedialog.asksaveasfilename(
+            defaultextension=ktio.EXT, initialfile=sugerido,
+            filetypes=[("Proyecto ktool", "*.ktool.json"), ("JSON", "*.json")])
+        if not ruta:
+            return False
+        self._ruta = ruta
+        return self.guardar()
+
+    def _puede_descartar(self):
+        """Antes de cambiar de proyecto: si hay cambios, se pregunta. Lo que no
+        se guarde va a la papelera de ktool, recuperable despues."""
+        if not self._hay_cambios():
+            return True
+        respuesta = messagebox.askyesnocancel(
+            "Cambios sin guardar",
+            "Hay cambios sin guardar. Guardarlos antes de seguir?\n\n"
+            "Si dices que no, se quedan en la papelera de ktool "
+            "(Archivo > Recuperar trabajo anterior).")
+        if respuesta is None:
+            return False
+        if respuesta:
+            return self.guardar()
+        self._a_la_papelera()
+        return True
+
+    def nuevo(self):
+        if not self._puede_descartar():
+            return
+        self.input_names = default_vars(3)
+        vacio = {"doc_type": "table", "nvars": 3, "output_names": ["Y"],
+                 "values": [[0] * 8], "form": "auto"}
+        self.aplicar(vacio)
+        self._marcar_guardado(None)
+
+    def abrir(self, ruta=None):
+        if not self._puede_descartar():
+            return
+        ruta = ruta or filedialog.askopenfilename(
+            filetypes=[("Proyecto ktool", "*.ktool.json *.json"), ("Todos", "*.*")])
+        if not ruta:
+            return
+        try:
+            fuente = ktio.load(ruta)
+        except (OSError, ValueError) as e:
+            messagebox.showerror("No se pudo abrir", str(e))
+            return
+        if ktio.doc_type(fuente) == "fsm":
+            messagebox.showinfo("Es una maquina de estados",
+                                "Ese archivo es una maquina de estados. Las maquinas llegan "
+                                "a la ventana con la siguiente version.")
+            return
+        try:
+            self.aplicar(fuente)
+        except (KeyError, ValueError, TypeError, tk.TclError) as e:
+            messagebox.showerror("El archivo no se pudo leer", str(e))
+            return
+        self._marcar_guardado(ruta)
+
+    def abrir_ejemplo(self, hacer):
+        """Un ejemplo se abre como proyecto nuevo, sin ruta: al guardarlo se
+        pregunta donde, para no pisar nada."""
+        if not self._puede_descartar():
+            return
+        self.aplicar(hacer())
+        self._marcar_guardado(None)
+        self._guardado = None          # un ejemplo cuenta como cambio sin guardar
+        self._actualizar_titulo()
+
+    def generar_todo(self):
+        self.resultados.mostrar("generar")
+        self.resultados.generar_todo()
+
+    # -- autoguardado y papelera --
+    def _carpeta_de_ktool(self, nombre):
+        base = os.environ.get("LOCALAPPDATA") or os.path.expanduser("~")
+        carpeta = os.path.join(base, "ktool", nombre)
+        os.makedirs(carpeta, exist_ok=True)
+        return carpeta
+
+    def _nueva_ruta_de_autoguardado(self):
+        try:
+            return os.path.join(self._carpeta_de_ktool("autoguardado"),
+                                f"sesion-{os.getpid()}{ktio.EXT}")
+        except OSError:
+            return None
+
+    def _revisar_autoguardado(self):
+        """Cada pocos segundos: si el proyecto cambio desde la ultima copia,
+        se escribe otra. Tambien actualiza la marca * del titulo."""
+        try:
+            ahora = self._instantanea()
+            if self._autoguardado and ahora != self._ultimo_autoguardado and self._hay_cambios():
+                ktio.save(self.serializar(), self._autoguardado)
+                self._ultimo_autoguardado = ahora
+            self._actualizar_titulo()
+        except (OSError, tk.TclError, ValueError):
+            pass
+        self.root.after(AUTOGUARDADO_MS, self._revisar_autoguardado)
+
+    def _a_la_papelera(self):
+        """Lo que se descarta sin guardar se mueve a la papelera de ktool."""
+        try:
+            sello = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            destino = os.path.join(self._carpeta_de_ktool("papelera"), f"{sello}{ktio.EXT}")
+            ktio.save(self.serializar(), destino)
+            if self._autoguardado and os.path.exists(self._autoguardado):
+                os.remove(self._autoguardado)
+            self._ultimo_autoguardado = None
+        except OSError:
+            pass
+
+    def recuperar(self):
+        """Abre una copia de la papelera o del autoguardado de otra sesion."""
+        try:
+            carpeta = self._carpeta_de_ktool("papelera")
+        except OSError:
+            carpeta = None
+        ruta = filedialog.askopenfilename(
+            title="Recuperar trabajo anterior", initialdir=carpeta,
+            filetypes=[("Proyecto ktool", "*.ktool.json"), ("Todos", "*.*")])
+        if ruta:
+            self.abrir(ruta)
+            self._ruta = None           # la copia de la papelera no es su lugar
+            self._guardado = None
+            self._actualizar_titulo()
+
+    def salir(self):
+        if not self._puede_descartar():
+            return
+        if self._autoguardado and os.path.exists(self._autoguardado):
+            try:
+                os.remove(self._autoguardado)
+            except OSError:
+                pass
+        self.root.destroy()
 
     # ---------- ventanas de ayuda ----------
     def _text_window(self, title, content, width=70, height=18):
@@ -744,7 +1051,7 @@ class App:
         ttk.Button(win, text="Cerrar", command=win.destroy).pack(pady=6)
 
     def show_guide(self):
-        self._text_window("Guia rapida", GUIDE)
+        self._text_window("Guia rapida", ayuda.GUIA_RAPIDA, 76, 22)
 
     def show_shortcuts(self):
         lines = ["Atajos de teclado y raton", ""]
