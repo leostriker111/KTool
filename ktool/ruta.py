@@ -1,4 +1,4 @@
-"""`python -m ktool --agregar-al-path`: deja el comando `ktool` en el PATH (Windows).
+r"""`python -m ktool --agregar-al-path`: deja el comando `ktool` en el PATH (Windows).
 
 Para quien instalo con pip y luego `ktool` "no se reconoce": pip pone ktool.exe
 en la carpeta de scripts de su Python, y esa carpeta no siempre esta en el PATH

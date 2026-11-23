@@ -1,5 +1,18 @@
 # Cambios
 
+## Sin publicar
+
+- Nuevo: **kit de hardware** (`--hw CARPETA`). El circuito minimizado como codigo completo
+  para PIC (18F4550, 18F45K50, 16F877A, 16F628A, 16F84A, con XC8), ESP32 (WROOM-32, S3 y C3,
+  en Arduino y en MicroPython), Arduino Uno/Nano o Mega, Blue Pill (STM32duino), Raspberry Pi
+  Pico, VHDL y Verilog con sus bancos de prueba, el proyecto de Quartus para la MAX II
+  EPM240T100C5, la GAL22V10 en WinCUPL, la lista de materiales 74LS con cada cable, y una
+  simulacion en Python. Cada archivo trae su tabla de pines; una placa que no alcanza (por
+  pines, por memoria o por macroceldas) se bloquea con la cuenta exacta en vez de recibir
+  codigo roto. Solo combinacionales: las maquinas de estado llegan con el Release 3.
+  Diseno y verificacion en `docs/HARDWARE.md`. `--max2-pines` acomoda las senales en las
+  patas de la MAX II que traiga cada placa.
+
 ## 0.4.1
 
 - Arreglado: el instalador de Windows decia que dejaba `ktool` en el PATH, pero solo
