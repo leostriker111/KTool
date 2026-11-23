@@ -158,8 +158,8 @@ class Pines(unittest.TestCase):
         self.assertIn("PORTBbits.RB3", c)
         self.assertIn("LATC = ", c)
         ino = k.archivos["arduino/uno_nano/uno_nano.ino"]
-        self.assertIn("const uint8_t PIN_X = 4;", ino)     # lista vieja: orden de senales
-        self.assertIn("const uint8_t PIN_Q0 = 11;", ino)
+        self.assertIn("const uint8_t pin_X = 4;", ino)     # lista vieja: orden de senales
+        self.assertIn("const uint8_t pin_Q0 = 11;", ino)
 
 
 class Ajustes(unittest.TestCase):

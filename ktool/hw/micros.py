@@ -397,25 +397,25 @@ def arduino(circuito, renglones, titulo, nucleo, constante, modo_entrada, notas,
 {texto_notas}
 """]
     for r in renglones:
-        lineas.append(f"const {tipo} PIN_{r['senal']} = {constante(r['pin'])};")
+        lineas.append(f"const {tipo} pin_{r['senal']} = {constante(r['pin'])};")
     lineas.append("\nvoid setup() {")
     for r in entradas:
-        lineas.append(f"  pinMode(PIN_{r['senal']}, {modo_entrada(r['pin'])});")
+        lineas.append(f"  pinMode(pin_{r['senal']}, {modo_entrada(r['pin'])});")
     for r in salidas:
-        lineas.append(f"  pinMode(PIN_{r['senal']}, OUTPUT);")
+        lineas.append(f"  pinMode(pin_{r['senal']}, OUTPUT);")
     lineas.append("}\n")
     lineas.append("// Combinacional: leer, evaluar y escribir, sin pausa.")
     lineas.append("void loop() {")
     activo, inactivo = ("LOW", "HIGH") if salidas_en_bajo else ("HIGH", "LOW")
     for r in entradas:
-        lineas.append(f"  uint8_t in_{r['senal']} = digitalRead(PIN_{r['senal']}) == "
+        lineas.append(f"  uint8_t in_{r['senal']} = digitalRead(pin_{r['senal']}) == "
                       f"{'LOW' if entradas_en_bajo else 'HIGH'};")
     lineas.append("")
     for n in circuito.salidas:
         lineas.append(f"  uint8_t out_{n} = {ecuacion(circuito.arboles[n], 'c', 'in_')};")
     lineas.append("")
     for r in salidas:
-        lineas.append(f"  digitalWrite(PIN_{r['senal']}, out_{r['senal']} ? {activo} : {inactivo});")
+        lineas.append(f"  digitalWrite(pin_{r['senal']}, out_{r['senal']} ? {activo} : {inactivo});")
     lineas.append("}\n")
     return "\n".join(lineas)
 

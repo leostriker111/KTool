@@ -702,7 +702,7 @@ def arduino(tabla, variante, renglones, valores):
 {chr(10).join('// ' + n for n in notas)}
 """]
     for r in renglones:
-        t.append(f"const uint8_t PIN_{r['senal']} = {r['pin']};")
+        t.append(f"const uint8_t pin_{r['senal']} = {r['pin']};")
     t.append("")
     if ne:
         t.append(f"const uint8_t NUM_ENTRADAS = {ne};   // bits de entrada: "
@@ -747,7 +747,7 @@ uint8_t leerEntradas() {{
   uint8_t entradas = 0;""")
         nivel = "LOW" if entradas_en_bajo else "HIGH"
         for k, r in enumerate(entradas):
-            t.append(f"  if (digitalRead(PIN_{r['senal']}) == {nivel}) entradas |= {1 << (ne - 1 - k)};"
+            t.append(f"  if (digitalRead(pin_{r['senal']}) == {nivel}) entradas |= {1 << (ne - 1 - k)};"
                      f"   // {r['senal']}")
         t.append("  return entradas;\n}")
         t.append(f"""
@@ -766,7 +766,7 @@ void escribir({parametro}) {{""")
             origen, desde = "estado", nb - 1 - tabla.bits.index(r["senal"])
         else:
             origen, desde = "salidas", ns - 1 - tabla.salidas.index(r["senal"])
-        t.append(f"  digitalWrite(PIN_{r['senal']}, (({origen} >> {desde}) & 1) ? "
+        t.append(f"  digitalWrite(pin_{r['senal']}, (({origen} >> {desde}) & 1) ? "
                  f"{activo} : {inactivo});")
     t.append("}")
 
@@ -807,9 +807,9 @@ void avanzar() {""")
     t.append("\nvoid setup() {")
     modo = "INPUT_PULLUP" if entradas_en_bajo else "INPUT"
     for r in entradas:
-        t.append(f"  pinMode(PIN_{r['senal']}, {modo});")
+        t.append(f"  pinMode(pin_{r['senal']}, {modo});")
     for r in salidas:
-        t.append(f"  pinMode(PIN_{r['senal']}, OUTPUT);")
+        t.append(f"  pinMode(pin_{r['senal']}, OUTPUT);")
     if con_serial:
         t.append("  Serial.begin(9600);")
     if ne and (llamada_imprimir or (ns and mealy)):

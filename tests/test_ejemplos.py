@@ -29,6 +29,19 @@ class Ejemplos(unittest.TestCase):
                     self.assertEqual(len(col), filas, titulo)
                     self.assertTrue(set(col) <= {0, 1, "x"}, titulo)
 
+    def test_una_entrada_A0_no_choca_con_el_nucleo_de_arduino(self):
+        # el nucleo de Arduino ya define PIN_A0..PIN_A7: el sketch nombra cada
+        # pin pin_<senal>, en minusculas, para que una entrada A0 compile
+        from ktool.core.table import TruthTable
+        from ktool.hw import kit
+        p = ejemplos.decodificador_2_a_4()
+        tabla = TruthTable(p["nvars"], p["input_names"])
+        for nombre, col in zip(p["output_names"], p["values"]):
+            tabla.set_output(nombre, col)
+        ino = kit.armar(tabla, elegidas=["uno_nano"]).archivos["arduino/uno_nano/uno_nano.ino"]
+        self.assertNotIn("PIN_", ino)
+        self.assertIn("pin_A0", ino)
+
     def test_bcd_a_7_segmentos_es_la_tabla_de_la_practica(self):
         p = ejemplos.bcd_a_7_segmentos()
         # tabla de Convertidores de codigo, catodo comun, a..g
@@ -77,6 +90,79 @@ class Ejemplos(unittest.TestCase):
         for n in range(16):
             g = sum(columna(ida, f"G{k}")[n] << k for k in range(4))
             self.assertEqual(sum(columna(vuelta, f"B{k}")[g] << k for k in range(4)), n)
+
+    def test_compuertas_basicas_son_las_tablas_de_la_practica(self):
+        # tablas de Compuertas logicas, filas A B = 00, 01, 10, 11
+        p = ejemplos.compuertas_basicas()
+        esperado = {"Y_NAND": [1, 1, 1, 0], "Y_NOR": [1, 0, 0, 0], "Y_NOT": [1, 1, 0, 0],
+                    "Y_AND": [0, 0, 0, 1], "Y_OR": [0, 1, 1, 1], "Y_XOR": [0, 1, 1, 0]}
+        for salida, columna_esperada in esperado.items():
+            self.assertEqual(columna(p, salida), columna_esperada, salida)
+
+    def test_alarma_del_refrigerador_es_la_tabla_2_3(self):
+        p = ejemplos.alarma_refrigerador()
+        self.assertEqual(columna(p, "F"), [0, 0, 1, 1, 0, 0, 0, 1])
+
+    def test_sumador_y_restador_de_3_bits(self):
+        s = ejemplos.sumador_3_bits()
+        r = ejemplos.restador_3_bits_comparador()
+        for a in range(8):
+            for b in range(8):
+                fila = a * 8 + b
+                total = sum(columna(s, n)[fila] << k
+                            for k, n in enumerate(["S0", "S1", "S2", "CS"]))
+                self.assertEqual(total, a + b)
+                d = sum(columna(r, n)[fila] << k for k, n in enumerate(["D0", "D1", "D2"]))
+                ps = columna(r, "PS")[fila]
+                self.assertEqual(d - 8 * ps, a - b)    # PS D2 D1 D0 en complemento a 2
+                comparador = [columna(r, n)[fila] for n in ("MENOR", "IGUAL", "MAYOR")]
+                self.assertEqual(comparador, [int(a < b), int(a == b), int(a > b)])
+
+    def test_restador_decodificado_muestra_la_magnitud_y_el_signo(self):
+        p = ejemplos.restador_3_bits_7_segmentos()
+        siete = ["1111110", "0110000", "1101101", "1111001", "0110011",
+                 "1011011", "1011111", "1110000"]
+        for a in range(8):
+            for b in range(8):
+                fila = a * 8 + b
+                patron = "".join(str(columna(p, s)[fila]) for s in "abcdefg")
+                self.assertEqual(patron, siete[abs(a - b)], (a, b))
+                self.assertEqual(columna(p, "SIGNO")[fila], int(a < b))
+
+    def test_binario_a_octal(self):
+        p = ejemplos.binario_a_octal_7_segmentos()
+        self.assertEqual("".join(str(columna(p, s)[5]) for s in "abcdefg"), "1011011")
+        self.assertEqual("".join(str(columna(p, s)[7]) for s in "abcdefg"), "1110000")
+
+    def test_alu_de_2_bits(self):
+        p = ejemplos.alu_2_bits()
+        for operacion in range(4):
+            for a in range(4):
+                for b in range(4):
+                    fila = operacion * 16 + a * 4 + b
+                    arit = [columna(p, s)[fila] for s in ("ZA", "ZB", "ZC")]
+                    logi = columna(p, "ZD")[fila] * 2 + columna(p, "ZE")[fila]
+                    if operacion == 0:
+                        self.assertEqual(arit[0] * 4 + arit[1] * 2 + arit[2], a + b)
+                    elif operacion == 1:
+                        self.assertEqual(arit[1] * 2 + arit[2] - 4 * arit[0], a - b)
+                    elif operacion == 2:
+                        self.assertEqual(arit, [int(a < b), int(a == b), int(a > b)])
+                    else:
+                        self.assertEqual(arit, [0, 0, 0])
+                    self.assertEqual(logi, [a & b, a | b, a ^ b, 3 - a][operacion])
+
+    def test_xor_de_tres_entradas(self):
+        p = ejemplos.xor_de_tres_entradas()
+        self.assertEqual(columna(p, "F"), [0, 1, 1, 0, 1, 0, 0, 1])
+
+    def test_nombre_en_16_segmentos_tiene_seis_letras(self):
+        p = ejemplos.nombre_16_segmentos()
+        self.assertEqual(p["nvars"], 3)
+        self.assertEqual(len(p["output_names"]), 16)
+        # las filas 6 y 7 no tienen letra: no importan
+        for col in p["values"]:
+            self.assertEqual(col[6:], ["x", "x"])
 
     def test_el_multiplexor_se_simplifica_a_sus_cuatro_terminos(self):
         p = ejemplos.multiplexor_4_a_1()

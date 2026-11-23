@@ -253,13 +253,13 @@ class Pines(unittest.TestCase):
         for linea in ("PIN_26 -to A", "PIN_28 -to B", "PIN_81 -to Y_AND", "PIN_77 -to Y_OR"):
             self.assertIn("set_location_assignment " + linea, qsf)
         uno = armado.archivos["arduino/uno_nano/uno_nano.ino"]
-        self.assertIn("const uint8_t PIN_Y_AND = A0;", uno)
-        self.assertIn("const uint8_t PIN_Y_OR = 13;", uno)
+        self.assertIn("const uint8_t pin_Y_AND = A0;", uno)
+        self.assertIn("const uint8_t pin_Y_OR = 13;", uno)
         pic = armado.archivos["pic/pic16f628a.c"]
         self.assertIn("if (PORTAbits.RA1) fila__ |= 0x01;   // B", pic)
         self.assertIn("PORTB = (uint8_t)((out_Y_AND << 5) | (out_Y_OR << 4));", pic)
         # las placas sin pines propios siguen con su reparto de siempre
-        self.assertIn("PIN_A = 32;", armado.archivos["esp32/esp32_wroom32/esp32_wroom32.ino"])
+        self.assertIn("pin_A = 32;", armado.archivos["esp32/esp32_wroom32/esp32_wroom32.ino"])
 
     def test_pines_que_no_sirven_dicen_por_que(self):
         c = Circuito(TruthTable(2, outputs={"Y": [0, 1, 1, 0]}))
