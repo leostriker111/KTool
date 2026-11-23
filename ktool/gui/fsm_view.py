@@ -15,7 +15,7 @@ from tkinter import ttk, messagebox, filedialog
 from ..fsm import Machine, flipflops
 from ..render.fsm_report import build_fsm_report, save_report
 from ..render.fsm_diagram import _seg7_polys, _node_positions
-from .. import io as ktio, theme
+from .. import io as ktio, segmentos, theme
 from ..hw.configuracion import ConfigKit
 
 _STATE_COLS = [("name", "nombre", 8), ("code", "codigo", 7),
@@ -34,6 +34,17 @@ _DEMO = {
                     {"from": "S2", "in": "", "to": "S3"},
                     {"from": "S3", "in": "", "to": "S0"}],
 }
+
+
+def _caracter_de_etiqueta(etiqueta):
+    """'12' -> 'C', '7' -> '7', 'A' -> 'A': lo que cabe en un solo display de 7
+    segmentos, o None si la etiqueta no se puede mostrar asi."""
+    texto = etiqueta.strip()
+    if texto.isdigit() and int(texto) < 16:
+        return "0123456789ABCDEF"[int(texto)]
+    if len(texto) == 1 and texto.upper() in segmentos.soportados("7seg"):
+        return texto.upper()
+    return None
 
 
 def _csv(text):
@@ -257,9 +268,18 @@ class FsmView:
 
     # -- preview 7 segmentos --
     def _draw_7seg(self, bits, caption):
+        """El display del estado: sus salidas a..g si la maquina las tiene; si no
+        (un contador), el numero de su etiqueta en hexadecimal, como lo mostraria
+        un decodificador BCD/hex a 7 segmentos."""
         c = self.seg_canvas
         c.delete("all")
         segs = _csv(self.e_outputs.get()) or list("abcdefg")
+        if not bits:
+            caracter = _caracter_de_etiqueta(caption)
+            if caracter is not None:
+                encendidos = segmentos.segmentos(caracter, "7seg")
+                segs = list("abcdefg")
+                bits = "".join(str(encendidos[s]) for s in segs)
         sc = 0.6
         for name, poly in _seg7_polys():
             i = segs.index(name) if name in segs else -1
@@ -333,6 +353,8 @@ class FsmView:
             self._add_row(self.trans_box, self.trans_rows, _TRANS_COLS, {
                 "from": t.get("from", ""), "in": t.get("in", ""), "to": t.get("to", "")})
         self._schedule_redraw()
+        if self.state_rows:               # el display arranca en el primer estado
+            self._on_focus(self.state_rows[0])
 
     # -- acciones --
     def cargar(self, fuente):
