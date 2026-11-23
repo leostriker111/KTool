@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
-import os
 import webbrowser
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog, simpledialog
+from tkinter import ttk, messagebox, simpledialog
 
 from ..core import table
 from ..core.table import TruthTable, default_vars, MIN_VARS, MAX_VARS, MAX_OUTPUTS
 from ..core import ast as expr
-from ..core.simplify import solve_output, shared_terms
-from ..render.report import Options, build_report, save_report
 from ..render import codegen
 from .displays import DisplayWidget
+from .resultados import PanelResultados
 
 from .. import theme
 
-REPO_URL = "https://github.com/leostriker111/ktool"
+REPO_URL = "https://github.com/leostriker111/KTool"
 
 CYCLE = {0: 1, 1: "x", "x": 0}
 
@@ -37,25 +35,33 @@ SHORTCUTS = [
 
 GUIDE = (
     "ktool simplifica logica digital.\n\n"
-    "1. Elige cuantas variables (2-6) y cuantas salidas (1-10).\n"
+    f"1. Elige cuantas variables ({MIN_VARS}-{MAX_VARS}) y cuantas salidas (1-{MAX_OUTPUTS}).\n"
     "2. Llena la tabla: cada celda cicla 0 -> 1 -> x con doble clic, o\n"
     "   selecciona varias y presiona 1, 0 o x.\n"
     "3. Tambien puedes escribir una expresion (ej: A'B + C) y llenar una\n"
     "   columna evaluandola.\n"
-    "4. 'Ecuaciones' muestra SOP, POS, XOR/XNOR y la mejor por costo.\n"
-    "5. 'Generar documento' arma un HTML con mapas de Karnaugh, circuitos,\n"
-    "   el circuito completo con compuertas compartidas y las ecuaciones en\n"
-    "   varios lenguajes (Verilog, VHDL, ABEL, Logisim, C, ...).\n"
-    "6. 'Kit de hardware' escribe una carpeta con el circuito listo para\n"
-    "   grabar: PIC, ESP32, Arduino, STM32, Pico, VHDL/Verilog, MAX II,\n"
-    "   GAL22V10, chips 74LS y una simulacion en Python. Si una placa no\n"
-    "   alcanza, te dice por que.\n\n"
+    "4. 'Forma' (arriba) decide la realizacion: auto (la mas barata), SOP,\n"
+    "   POS, solo NAND o solo NOR. Vale para todo lo de abajo.\n"
+    "5. Abajo, en Resultados, todo sale de la misma tabla:\n"
+    "   - Ecuaciones: todas las formas y la mejor por costo.\n"
+    "   - Documento: el HTML con lo que marques (de entrada, todo).\n"
+    "   - Protoboard: el armado fisico con chips, tablero y cables.\n"
+    "   - Kit de hardware: el codigo para PIC, ESP32, Arduino, STM32, Pico,\n"
+    "     VHDL/Verilog, MAX II, GAL22V10 y 74LS. Si una placa no alcanza,\n"
+    "     dice por que; si tu placa trae LEDs en pines fijos, se los das.\n"
+    "   El menu Armado lleva directo a Protoboard y a Kit de hardware.\n\n"
     "Renombra una salida haciendo clic en su encabezado."
 )
 
 
 def _default_name(i, k):
     return "Y" if k == 1 else f"Y{i + 1}"
+
+
+def _ancho_encabezado(nombre):
+    """Ancho (en caracteres) de la columna de una salida: 4 como minimo, y lo que
+    pida el nombre, para que 'Y_AND' no se lea '_AND'."""
+    return max(4, len(nombre) + 1)
 
 
 def _parse_fill_number(text, rows):
@@ -123,8 +129,8 @@ class App:
         menubar = tk.Menu(self.root)
 
         m_file = tk.Menu(menubar, tearoff=0)
-        m_file.add_command(label="Generar documento", command=self.generate)
-        m_file.add_command(label="Kit de hardware...", command=self.hardware_kit)
+        m_file.add_command(label="Generar documento...",
+                           command=lambda: self._abrir_y_correr("documento"))
         m_file.add_separator()
         m_file.add_command(label="Salir", command=self.root.destroy)
         menubar.add_cascade(label="Archivo", menu=m_file)
@@ -146,6 +152,15 @@ class App:
         m_ins.add_separator()
         m_ins.add_command(label="Quitar todos", command=self.clear_displays)
         menubar.add_cascade(label="Insertar", menu=m_ins)
+
+        # el armado fisico: abre su pestana en el panel de Resultados, donde
+        # estan sus opciones y su boton
+        m_armado = tk.Menu(menubar, tearoff=0)
+        m_armado.add_command(label="Armado en protoboard...",
+                             command=lambda: self.resultados.mostrar("protoboard"))
+        m_armado.add_command(label="Kit de hardware...",
+                             command=lambda: self.resultados.mostrar("kit"))
+        menubar.add_cascade(label="Armado", menu=m_armado)
 
         m_help = tk.Menu(menubar, tearoff=0)
         m_help.add_command(label="Guia rapida", command=self.show_guide)
@@ -177,18 +192,16 @@ class App:
         ttk.Checkbutton(bar, text="Notas", variable=self.notes_on,
                         command=self.rebuild_table).pack(side=tk.LEFT, padx=(0, 12))
 
+        # La forma vale para todo el panel de Resultados: ecuaciones, documento,
+        # protoboard y kit. 'both' (SOP y POS lado a lado) solo cambia el documento.
         ttk.Label(bar, text="Forma:").pack(side=tk.LEFT)
-        ttk.OptionMenu(bar, self.form, "auto", "auto", "sop", "pos", "both").pack(
-            side=tk.LEFT, padx=(2, 12))
+        ttk.OptionMenu(bar, self.form, "auto", "auto", "sop", "pos", "nand", "nor",
+                       "both").pack(side=tk.LEFT, padx=(2, 12))
 
         ttk.Label(bar, text="Poner:").pack(side=tk.LEFT)
         for val, txt in ((1, "1"), (0, "0"), ("x", "x")):
             ttk.Button(bar, text=txt, width=2,
                        command=lambda v=val: self.apply_value(v)).pack(side=tk.LEFT, padx=1)
-
-        ttk.Button(bar, text="Ecuaciones", command=self.show_equations).pack(side=tk.LEFT, padx=(12, 4))
-        ttk.Button(bar, text="Generar documento", command=self.generate).pack(side=tk.LEFT, padx=4)
-        ttk.Button(bar, text="Kit de hardware...", command=self.hardware_kit).pack(side=tk.LEFT, padx=4)
 
         bar2 = ttk.Frame(self.root, padding=(8, 0, 8, 6))
         bar2.pack(side=tk.TOP, fill=tk.X)
@@ -286,10 +299,8 @@ class App:
             d.relight(nv)
 
     def _build_bottom(self):
-        frame = ttk.LabelFrame(self.root, text="Resultados", padding=6)
-        frame.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=6)
-        self.result = tk.Text(frame, height=9, font=("Consolas", 10), wrap="none")
-        self.result.pack(fill=tk.X)
+        # Ecuaciones, Documento, Protoboard y Kit de hardware (gui/resultados.py)
+        self.resultados = PanelResultados(self, self.root)
 
     def _bind_keys(self):
         r = self.root
@@ -447,7 +458,8 @@ class App:
             col += 1
         out_start = col
         for oi in range(k):
-            lbl = tk.Label(self.table_frame, text=self.output_names[oi], width=4, anchor="center",
+            lbl = tk.Label(self.table_frame, text=self.output_names[oi],
+                           width=_ancho_encabezado(self.output_names[oi]), anchor="center",
                            relief="solid", borderwidth=1, bg="#dde7f7", cursor="hand2")
             lbl.grid(row=0, column=col, sticky="nsew")
             lbl.bind("<Button-1>", lambda e, o=oi: self.rename_output(o))
@@ -639,7 +651,7 @@ class App:
             messagebox.showerror("Nombre repetido", f"Ya existe una salida llamada {new!r}.")
             return
         self.output_names[oi] = new
-        self.out_headers[oi].config(text=new)
+        self.out_headers[oi].config(text=new, width=_ancho_encabezado(new))
         self.expr_target["values"] = self.output_names
         self._refresh_displays()
 
@@ -714,164 +726,11 @@ class App:
             lines.append("")
         self._text_window(f"Traduccion -> {choice}", "\n".join(lines))
 
-    def show_equations(self):
-        table = self._current_table()
-        sols = {name: solve_output(v, table.variables) for name, v in table.outputs.items()}
-        lines = [f"{table.nvars} variables: {', '.join(table.variables)}", ""]
-        for name, sol in sols.items():
-            lines.append(f"[{name}]")
-            lines.append(f"  SOP : {name} = {sol['sop'].equation}   ({sol['sop'].cost()[0]} comp, {sol['sop'].cost()[1]} lit)")
-            lines.append(f"  POS : {name} = {sol['pos'].equation}   ({sol['pos'].cost()[0]} comp, {sol['pos'].cost()[1]} lit)")
-            if sol["xor"]:
-                lines.append(f"  XOR : {name} = {sol['xor'].equation}   ({sol['xor'].cost()[0]} comp, {sol['xor'].cost()[1]} lit)")
-            lines.append(f"  best: {sol['best'].form.upper()} -> {name} = {sol['best'].equation}")
-            lines.append("")
-        if len(table.outputs) > 1:
-            sh = shared_terms(sols, table.variables, "sop")
-            if sh:
-                lines.append("[terminos reutilizables (SOP)]")
-                for d in sh:
-                    lines.append(f"  {d['term']:<14} -> {', '.join(d['outputs'])}")
-        self.result.delete("1.0", tk.END)
-        self.result.insert("1.0", "\n".join(lines))
-
-    def generate(self):
-        table = self._current_table()
-        opt = Options(form=self.form.get(), title="Resultados ktool")
-        html = build_report(table, opt)
-        path = filedialog.asksaveasfilename(
-            defaultextension=".html",
-            filetypes=[("HTML", "*.html")],
-            initialfile="ktool_resultado.html",
-        ) or None
-        saved = save_report(html, path, open_browser=True)
-        self.show_equations()
-        messagebox.showinfo("Documento generado", f"Guardado en:\n{saved}")
-
-    # ---------- kit de hardware ----------
-    def hardware_kit(self):
-        """Ventana para escribir el kit de hardware de la tabla que esta en pantalla.
-
-        Pide tres cosas: la carpeta, la forma (la de la barra de arriba por
-        omision) y, opcional, las patas de la MAX II para placas con LEDs y
-        botones en patas fijas. Lo demas lo decide el generador (hw/kit.py),
-        igual que con `ktool --hw` en la terminal.
-        """
-        table = self._current_table()
-        win = tk.Toplevel(self.root)
-        win.title("Kit de hardware")
-        win.transient(self.root)
-        win.resizable(False, False)
-        cuerpo = ttk.Frame(win, padding=12)
-        cuerpo.pack(fill=tk.BOTH, expand=True)
-
-        ttk.Label(cuerpo, text=(
-            "Escribe una carpeta con el circuito listo para grabar en PIC, ESP32, Arduino,\n"
-            "STM32, Pico, VHDL/Verilog, MAX II, GAL22V10 y chips 74LS. Cada archivo trae\n"
-            "su tabla de pines; si una placa no alcanza, el resumen dice por que."),
-            justify=tk.LEFT).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
-
-        ttk.Label(cuerpo, text="Carpeta:").grid(row=1, column=0, sticky="w")
-        carpeta = tk.StringVar(value=os.path.join(os.path.expanduser("~"), "Documents", "ktool_kit"))
-        ttk.Entry(cuerpo, textvariable=carpeta, width=52).grid(row=1, column=1, sticky="we", padx=4)
-
-        def elegir():
-            elegida = filedialog.askdirectory(parent=win, title="Carpeta del kit",
-                                              initialdir=os.path.dirname(carpeta.get()))
-            if elegida:
-                carpeta.set(elegida)
-        ttk.Button(cuerpo, text="Elegir...", command=elegir).grid(row=1, column=2)
-
-        # 'both' es solo para el documento; para grabar hace falta una sola forma
-        actual = self.form.get() if self.form.get() in ("sop", "pos") else "auto"
-        forma = tk.StringVar(value=actual)
-        ttk.Label(cuerpo, text="Forma:").grid(row=2, column=0, sticky="w", pady=(8, 0))
-        ttk.OptionMenu(cuerpo, forma, actual, "auto", "sop", "pos", "nand", "nor").grid(
-            row=2, column=1, sticky="w", padx=4, pady=(8, 0))
-
-        ttk.Label(cuerpo, text="Patas MAX II:").grid(row=3, column=0, sticky="w", pady=(8, 0))
-        pines = tk.StringVar()
-        ttk.Entry(cuerpo, textvariable=pines, width=52).grid(row=3, column=1, sticky="we",
-                                                           padx=4, pady=(8, 0))
-        orden = ", ".join(table.variables) + "  luego  " + ", ".join(table.outputs)
-        ttk.Label(cuerpo, foreground="#777", text=(
-            f"Opcional. En este orden: {orden}.\n"
-            "Vacio = ktool las escoge. Ej: 26,28,33,73")).grid(
-            row=4, column=1, columnspan=2, sticky="w", padx=4)
-
-        botones = ttk.Frame(cuerpo)
-        botones.grid(row=5, column=0, columnspan=3, sticky="e", pady=(12, 0))
-        ttk.Button(botones, text="Cancelar", command=win.destroy).pack(side=tk.RIGHT, padx=(6, 0))
-        ttk.Button(botones, text="Generar",
-                   command=lambda: self._write_kit(win, table, carpeta.get(), forma.get(),
-                                                   pines.get())).pack(side=tk.RIGHT)
-        win.grab_set()
-
-    def _write_kit(self, win, table, carpeta, forma, pines_texto):
-        """Valida lo que se escribio, genera y muestra el resumen."""
-        from ..hw import kit
-
-        carpeta = carpeta.strip()
-        if not carpeta:
-            messagebox.showerror("Falta la carpeta", "Escribe o elige una carpeta.", parent=win)
-            return
-        pines = None
-        if pines_texto.strip():
-            try:
-                pines = [int(p) for p in pines_texto.replace(",", " ").split()]
-            except ValueError:
-                messagebox.showerror("Patas invalidas",
-                                     "Las patas son numeros separados por comas, ej. 26,28,33.",
-                                     parent=win)
-                return
-        if os.path.isdir(carpeta) and os.listdir(carpeta):
-            if not messagebox.askyesno(
-                    "La carpeta ya tiene archivos",
-                    f"{carpeta}\n\nya tiene archivos. Los del kit se reemplazan; los demas "
-                    "se quedan. Seguir?", parent=win):
-                return
-
-        win.config(cursor="watch")
-        win.update_idletasks()
-        try:
-            resumen = kit.generar(table, carpeta, forma, pines)
-        except ValueError as e:   # nombres que no compilan, patas que no son de I/O...
-            messagebox.showerror("No se pudo generar", str(e), parent=win)
-            return
-        finally:
-            win.config(cursor="")
-        win.destroy()
-        self._show_kit_result(carpeta, resumen)
-
-    def _show_kit_result(self, carpeta, resumen):
-        """Lo que salio y lo que se bloqueo, plataforma por plataforma."""
-        listos = sum(1 for _, estado, _ in resumen if estado == "listo")
-        lineas = [f"Kit escrito en:\n  {carpeta}", "",
-                  f"{listos} de {len(resumen)} listos.", ""]
-        for plataforma, estado, detalle in resumen:
-            if estado == "listo":
-                lineas.append(f"  ok  {plataforma}")
-            else:
-                lineas.append(f"  --  {plataforma}")
-                lineas.append(f"      {detalle}")
-        lineas += ["", "El resumen completo esta en LEEME.md dentro de la carpeta.",
-                   "Antes de grabar: python python/simular.py compara las ecuaciones",
-                   "con tu tabla."]
-
-        win = tk.Toplevel(self.root)
-        win.title("Kit de hardware")
-        # alto segun lo que hay que decir, para que no se corte el ultimo renglon
-        txt = tk.Text(win, wrap="word", width=88, height=min(len(lineas) + 1, 40),
-                      font=("Consolas", 10), padx=10, pady=10)
-        txt.pack(fill=tk.BOTH, expand=True)
-        txt.insert("1.0", "\n".join(lineas))
-        txt.config(state="disabled")
-        barra = ttk.Frame(win, padding=6)
-        barra.pack(fill=tk.X)
-        ttk.Button(barra, text="Cerrar", command=win.destroy).pack(side=tk.RIGHT)
-        if hasattr(os, "startfile"):   # abrir la carpeta solo existe en Windows
-            ttk.Button(barra, text="Abrir carpeta",
-                       command=lambda: os.startfile(carpeta)).pack(side=tk.RIGHT, padx=6)
+    def _abrir_y_correr(self, pestana):
+        """Desde el menu: abre la pestana de Resultados y corre su accion."""
+        self.resultados.mostrar(pestana)
+        if pestana == "documento":
+            self.resultados.generar_documento()
 
     # ---------- ventanas de ayuda ----------
     def _text_window(self, title, content, width=70, height=18):

@@ -153,8 +153,10 @@ El VHDL es lo que Quartus compila para la EPM240, así que tiene su propia pasad
 - **3.3 V.** Las patas de la MAX II no aguantan 5 V directo; el `.qsf` lo
   advierte y dice cómo bajar el nivel si la señal viene de un chip TTL.
 - **Las patas de tu placa.** Las placas de práctica traen LEDs y botones en
-  patas fijas, así que `--max2-pines 26,28,33,...` pone cada señal donde haga
-  falta (primero las entradas, luego las salidas). Cada pata se revisa contra la
+  patas fijas, así que `--pines max2=26,28,33,...` (o `--max2-pines`) pone cada
+  señal donde haga falta (primero las entradas, luego las salidas). Lo mismo vale
+  para las demás placas: `modelo.con_pines` revisa cada pin contra los utilizables
+  de esa placa. Cada pata se revisa contra la
   tabla de Intel: VCC, GND y JTAG se rechazan con el motivo, y las GCLK, DEV_OE y
   DEV_CLRn también, para dejarlas libres.
 
@@ -176,9 +178,10 @@ familia), `PROJECT_OUTPUT_DIRECTORY output_files` en uno de un EPM240T100C5, y
   pasarles los archivos. Del lado de la MAX II lo que falta es solo eso: el
   VHDL ya está sintetizado y simulado después de la síntesis (arriba).
 - **Las máquinas de estado**, con el Release 3.
-- **En la GUI** está el botón *Kit de hardware…*, junto a *Generar documento*:
-  usa la tabla que está en pantalla (con varias salidas, cosa que la CLI no
-  permite), la forma elegida y, opcional, las patas de la MAX II.
+- **En la GUI** es la pestaña *Kit de hardware* del panel de Resultados (y el
+  menú *Armado*): usa la tabla que está en pantalla (con varias salidas, cosa que
+  la CLI no permite), la forma de la barra y, opcional, pines fijos para la placa
+  que se elija. La pestaña *Documento* puede meter el kit completo en el HTML.
 
 ## Cómo se agrega una placa
 
