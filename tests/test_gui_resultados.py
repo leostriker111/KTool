@@ -39,6 +39,7 @@ class VentanaBase(unittest.TestCase):
     def tearDown(self):
         if hasattr(self, "_env"):
             self._env.stop()
+            self.root.update_idletasks()   # lo pendiente corre antes de destruir
             self.root.destroy()
             self.dir.cleanup()
 
@@ -88,15 +89,15 @@ class PanelResultados(VentanaBase):
 
     def test_kit_con_pines_propios_y_uno_malo(self):
         carpeta = os.path.join(self.dir.name, "kit")
-        self.panel.kit_carpeta.set(carpeta)
-        self.panel.kit_placa.set("Intel/Altera MAX II EPM240T100C5")
-        self.panel._al_cambiar_placa()
-        self.panel.kit_pines.set("26,28,33,9")      # 9 es VCCIO
+        config = self.panel.kit_config
+        config.carpeta = carpeta
+        config.elegidas = ["max2"]
+        config.pines["max2"] = {"A": 26, "B": 28, "Y_XOR": 9}      # 9 es VCCIO
         with mock.patch("ktool.gui.resultados.messagebox.showerror") as error:
             self.panel.escribir_kit()
         self.assertIn("no es utilizable", error.call_args[0][1])
         self.assertFalse(os.path.exists(carpeta))
-        self.panel.kit_pines.set("26,28,33,73")
+        config.pines["max2"]["Y_XOR"] = 73
         self.panel.escribir_kit()
         with open(os.path.join(carpeta, "fpga", "circuito.qsf"), encoding="utf-8") as f:
             self.assertIn("set_location_assignment PIN_73 -to Y_XOR", f.read())
@@ -109,9 +110,9 @@ class Proyecto(VentanaBase):
         self.app.rebuild_table()
         self.panel.portada["autor"].set("Quien firma")
         self.panel.proto_extremos.set("display 7 seg, anodo comun")
-        self.panel.kit_placa.set("Arduino Uno / Nano (ATmega328P)")
-        self.panel._al_cambiar_placa()
-        self.panel.kit_pines.set("2,3,8,9")
+        self.panel.kit_config.pines["uno_nano"] = {"SEL": "2", "EN": "3"}
+        self.panel.kit_config.ajustes["uno_nano"] = {"entradas": "INPUT_PULLUP (boton a GND)"}
+        self.panel.kit_config.editados["python/simular.py"] = "# a mano\n"
         ruta = os.path.join(self.dir.name, "p.ktool.json")
         self.app._ruta = ruta
         self.assertTrue(self.app.guardar())

@@ -191,6 +191,17 @@ def _build_parser():
     cont.add_argument("--json", metavar="RUTA", help="guardar la maquina como .json")
     _opciones_secuenciales(cont)
 
+    rel = sub.add_parser("reloj", help="divisor de frecuencia o 555 astable (calculadora)")
+    rel.add_argument("--entrada", default="50M",
+                     help="reloj de entrada en Hz, acepta prefijos: 50M, 16M, 1k (por omision 50M)")
+    rel.add_argument("--salida", help="frecuencia que se quiere, en Hz (ej. 1, 0.5, 2k)")
+    rel.add_argument("--periodo", help="o el periodo que se quiere, en segundos (ej. 3)")
+    rel.add_argument("--ciclo", type=float, default=50, help="ciclo de trabajo en %% (por omision 50)")
+    rel.add_argument("--codigo", choices=["vhdl", "c", "asm", "arduino"],
+                     help="ademas, imprime el calculo escrito como codigo para ese hardware")
+    rel.add_argument("--555", dest="astable", action="store_true",
+                     help="en vez del divisor, R1, R2 y C de un 555 astable para --salida")
+
     # opciones de entrada (comando por defecto = resolver)
     p.add_argument("-n", "--vars", type=int,
                    help=f"numero de variables ({table.MIN_VARS}-{table.MAX_VARS})")
@@ -354,6 +365,47 @@ def _generar_kit(table, carpeta, forma, pines):
     print(f"resumen completo en {carpeta}/LEEME.md")
 
 
+def _correr_reloj(args):
+    """`ktool reloj`: los mismos datos que Herramientas > Calculadora de frecuencia."""
+    from .gui.calculadora import leer_numero
+    from .hw import reloj
+
+    if args.astable:
+        if not args.salida:
+            raise ValueError("--555 necesita --salida (la frecuencia del 555)")
+        r = reloj.astable_555_para(leer_numero(args.salida))
+        for etiqueta, valor, unidad in (("R1", r["r1"], "Ohm"), ("R2", r["r2"], "Ohm"),
+                                        ("C", r["c"], "F"), ("Frecuencia real", r["f"], "Hz"),
+                                        ("Error", r["error_pct"], "%"),
+                                        ("Periodo (T)", r["periodo"], "s"),
+                                        ("Tiempo en alto", r["t_alto"], "s"),
+                                        ("Tiempo en bajo", r["t_bajo"], "s"),
+                                        ("Ciclo de trabajo", r["ciclo"], "%")):
+            print(f"{etiqueta:<22} {reloj.formato(valor, unidad)}")
+        return
+    f_entrada = leer_numero(args.entrada)
+    if args.periodo:
+        calculo = reloj.calcular(f_entrada, periodo=leer_numero(args.periodo), ciclo=args.ciclo)
+    elif args.salida:
+        calculo = reloj.calcular(f_entrada, f_salida=leer_numero(args.salida), ciclo=args.ciclo)
+    else:
+        raise ValueError("falta --salida o --periodo")
+    for etiqueta, legible, _copia in calculo.renglones():
+        print(f"{etiqueta:<22} {legible}")
+    if args.codigo == "vhdl":
+        print("\n" + reloj.vhdl_divisor(f_entrada, calculo.f_real))
+    elif args.codigo == "c":
+        partes = reloj.c_pic18_retardo(f_entrada, calculo.f_real)
+        for clave in ("definiciones", "configurar", "esperar_medio_periodo"):
+            print("\n" + partes[clave])
+    elif args.codigo == "asm":
+        print("\n" + reloj.asm_pic18_retardo(f_entrada, calculo.t_alto))
+    elif args.codigo == "arduino":
+        partes = reloj.arduino_retardo(calculo.f_real)
+        for clave in ("variables", "setup", "en_loop"):
+            print("\n" + partes[clave])
+
+
 def main(argv=None):
     args = _build_parser().parse_args(argv)
 
@@ -383,6 +435,13 @@ def main(argv=None):
             ktio.save(dict(fuente, doc_type="fsm", ff=args.ff), args.json)
             print(f"maquina guardada en {args.json}")
         _correr_secuencial(args, fuente)
+        return
+
+    if args.cmd == "reloj":
+        try:
+            _correr_reloj(args)
+        except ValueError as e:
+            raise SystemExit(str(e))
         return
 
     if args.cmd == "gui":

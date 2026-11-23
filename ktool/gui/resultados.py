@@ -7,7 +7,7 @@ dentro de la misma pestana (nada de ventanas sueltas):
     Portada           titulo, autor, organizacion... y quien revisa y autoriza
     Generar           palomeas que contiene y sale todo de un clic en una carpeta
     Protoboard        el armado fisico: chips, tablero y cables
-    Kit de hardware   la carpeta con el codigo para cada placa, con pines fijos
+    Kit de hardware   resumen del kit; su ventana elige placas, pines y ajustes
 
 Todas leen la misma tabla y la misma *Forma* de la barra de arriba, asi que lo
 que dice una pestana es lo que hacen las otras. Generar usa la Portada y las
@@ -28,8 +28,9 @@ from .. import io as ktio
 from ..core.simplify import solve_output, shared_terms
 from ..render.report import CAMPOS_PORTADA, Options, build_report, save_report
 from ..proto import chips as catalogo_chips
-from ..hw import kit as hw_kit, placas
-from ..hw.modelo import leer_pines
+from ..hw import kit as hw_kit
+from ..hw.configuracion import ConfigKit
+from .kit_ventana import FuenteTabla, VentanaKit
 
 # texto de la pantalla -> valor del motor
 MODOS_PROTO = {
@@ -45,7 +46,6 @@ EXTREMOS = {
     "display 16 seg, catodo comun": "16seg_cc",
     "display 16 seg, anodo comun": "16seg_ca",
 }
-SIN_PINES = "(ktool los elige)"
 GRIS = "#777"
 
 # Lo que puede contener el documento, con su texto en pantalla. Todo palomeado
@@ -54,7 +54,7 @@ SECCIONES_DOCUMENTO = [
     ("portada", "Portada"), ("tabla", "Tabla de verdad"), ("kmap", "Mapas de Karnaugh"),
     ("circuito", "Circuitos"), ("compartidos", "Terminos compartidos"),
     ("lenguajes", "Ecuaciones en lenguajes"), ("proto", "Armado en protoboard"),
-    ("kit", "Kit de hardware (codigo)"),
+    ("kit", "Kit de hardware (pines, ajustes y codigo)"),
 ]
 # Lo que ademas se guarda en la carpeta, aparte del documento
 ARCHIVOS_APARTE = [
@@ -89,6 +89,8 @@ def con_ejemplo(entrada, variable, texto):
                         font=("Segoe UI", 9), pady=0, bd=0, highlightthickness=0)
 
     def actualizar(*_):
+        if not entrada.winfo_exists():   # la ventana se cerro antes de llegar aqui
+            return
         vacio = not variable.get()
         con_foco = entrada.focus_get() is entrada
         habilitado = str(entrada.cget("state")) != "disabled"
@@ -104,7 +106,9 @@ def con_ejemplo(entrada, variable, texto):
     entrada.bind("<FocusIn>", actualizar, add="+")
     entrada.bind("<FocusOut>", actualizar, add="+")
     variable.trace_add("write", actualizar)
-    entrada.after_idle(actualizar)
+    # desde la raiz y no desde el cuadro: si el cuadro se destruye antes de que
+    # Tk este libre, Tkinter borra sus comandos y la llamada pendiente truena
+    entrada._root().after_idle(actualizar)
     entrada.actualizar_ejemplo = actualizar   # para cuando cambia su estado
     return cambiar
 
@@ -174,7 +178,7 @@ class PanelResultados:
         if actual == str(self.pestanas["ecuaciones"]):
             self.actualizar_ecuaciones()
         elif actual == str(self.pestanas["kit"]):
-            self._actualizar_ejemplo_pines()
+            self._actualizar_resumen_kit()
 
     def _forma_unica(self):
         """La forma de la barra, para lo que necesita UNA sola realizacion.
@@ -308,7 +312,7 @@ class PanelResultados:
             table=c["tabla"], kmap=c["kmap"], circuit=c["circuito"],
             shared=c["compartidos"], langs=None if c["lenguajes"] else [],
             proto=c["proto"], kit=c["kit"],
-            kit_pines=self._pines_del_kit() if c["kit"] else {}, **proto)
+            kit_config=self.kit_config if c["kit"] else None, **proto)
 
     def generar_todo(self):
         """Un clic: el documento y todo lo palomeado, en <carpeta>/<titulo>/."""
@@ -330,7 +334,7 @@ class PanelResultados:
             documento = build_report(tabla, self._opciones_documento())
             armado = (build_report(tabla, self._opciones_documento(solo_armado=True))
                       if self.contiene["armado_aparte"].get() else None)
-            kit = (hw_kit.armar(tabla, self._forma_unica(), self._pines_del_kit())
+            kit = (self.kit_config.armar(tabla, self._forma_unica())
                    if self.contiene["kit_carpeta"].get() else None)
         except ValueError as e:   # un chip, un pin o un nombre que no sirve
             messagebox.showerror("No se pudo generar", str(e))
@@ -441,49 +445,49 @@ class PanelResultados:
 
     # ------------------------------------------------------- Kit de hardware
     def _pestana_kit(self):
+        """Resumen del kit y el boton a su ventana: elegir placas y pines en el
+        dibujo del componente, cambiar los ajustes y revisar cada archivo."""
         p = self._nueva_pestana("kit", "Kit de hardware")
-        ttk.Label(p, text="Carpeta:").grid(row=0, column=0, sticky="w")
-        self.kit_carpeta = tk.StringVar(
-            value=os.path.join(os.path.expanduser("~"), "Documents", "ktool_kit"))
-        ttk.Entry(p, textvariable=self.kit_carpeta, width=48).grid(row=0, column=1, sticky="we", padx=4)
-        ttk.Button(p, text="Elegir...",
-                   command=lambda: self._elegir_carpeta(self.kit_carpeta)).grid(row=0, column=2, sticky="w")
-
-        # Pines fijos para cualquier placa: se elige la placa y se escriben sus
-        # pines; cada placa recuerda los suyos.
-        ttk.Label(p, text="Pines fijos en:").grid(row=1, column=0, sticky="w", pady=(6, 0))
-        self.kit_placa = tk.StringVar(value=SIN_PINES)
-        self._titulo_a_placa = {info["titulo"]: nombre
-                                for nombre, info in placas.PLACAS_CON_PINES.items()}
-        combo = ttk.Combobox(p, textvariable=self.kit_placa, state="readonly", width=46,
-                             values=[SIN_PINES] + list(self._titulo_a_placa))
-        combo.grid(row=1, column=1, sticky="w", padx=4, pady=(6, 0))
-        combo.bind("<<ComboboxSelected>>", self._al_cambiar_placa)
-        self._pines_texto = {}            # nombre de placa -> texto escrito
-        self.kit_pines = tk.StringVar()
-        self.kit_pines_entry = ttk.Entry(p, textvariable=self.kit_pines, width=48, state="disabled")
-        self.kit_pines_entry.grid(row=2, column=1, sticky="we", padx=4, pady=(4, 0))
-        self._cambiar_ejemplo_pines = con_ejemplo(
-            self.kit_pines_entry, self.kit_pines, "Escoge una placa arriba")
-        self.kit_pines.trace_add("write", self._al_escribir_pines)
-        # Que placas ya tienen pines propios (se llena al escribir)
-        self.kit_pista = ttk.Label(p, foreground=GRIS, text="Vacio = ktool escoge los pines.")
-        self.kit_pista.grid(row=3, column=1, columnspan=2, sticky="w", padx=4)
-
-        acciones = ttk.Frame(p)
-        acciones.grid(row=0, column=3, rowspan=4, sticky="nsew", padx=(16, 0))
-        p.columnconfigure(3, weight=1)
-        botones = ttk.Frame(acciones)
-        botones.pack(fill=tk.X)
-        ttk.Button(botones, text="Escribir kit...", command=self.escribir_kit).pack(side=tk.LEFT)
-        self.kit_abrir = ttk.Button(botones, text="Abrir carpeta", state="disabled",
-                                    command=lambda: os.startfile(self.kit_carpeta.get()))
+        self.kit_config = ConfigKit()
+        izquierda = ttk.Frame(p)
+        izquierda.pack(side=tk.LEFT, fill=tk.Y)
+        ttk.Button(izquierda, text="Configurar kit...", command=self.abrir_kit).pack(
+            anchor="w")
+        ttk.Button(izquierda, text="Escribir kit", command=self.escribir_kit).pack(
+            anchor="w", pady=(6, 0))
+        self.kit_abrir = ttk.Button(izquierda, text="Abrir carpeta", state="disabled",
+                                    command=lambda: os.startfile(self.kit_config.carpeta))
         if hasattr(os, "startfile"):
-            self.kit_abrir.pack(side=tk.LEFT, padx=6)
-        caja = ttk.Frame(acciones)
-        caja.pack(fill=tk.BOTH, expand=True, pady=(6, 0))
+            self.kit_abrir.pack(anchor="w", pady=(6, 0))
+        caja = ttk.Frame(p, padding=(16, 0, 0, 0))
+        caja.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.kit_resumen = _texto_con_barra(caja, height=7, width=60, font=("Consolas", 9),
                                             state="disabled")
+        self._actualizar_resumen_kit()
+
+    def abrir_kit(self):
+        """La ventana del kit sobre la tabla de la ventana principal."""
+        VentanaKit(self.app.root, self.kit_config, FuenteTabla(self.app),
+                   al_cambiar=self._al_cambiar_kit)
+
+    def _al_cambiar_kit(self):
+        self._actualizar_resumen_kit()
+
+    def _actualizar_resumen_kit(self, escritos=None):
+        """Que placas se generan, con que pines y en que carpeta."""
+        c = self.kit_config
+        titulos = [hw_kit.TITULO_PLATAFORMA[p] for p in c.elegidas]
+        lineas = ["Se genera para:" if titulos else "Ninguna plataforma marcada."]
+        for p, titulo in zip(c.elegidas, titulos):
+            pines = c.pines.get(p)
+            nota = f"  ({len(pines)} pines fijos)" if pines else ""
+            lineas.append(f"  {titulo}{nota}")
+        lineas += ["", f"Carpeta: {c.carpeta}"]
+        if c.editados:
+            lineas.append(f"Archivos editados a mano: {len(c.editados)}")
+        if escritos:
+            lineas += [""] + escritos
+        _escribir_en(self.kit_resumen, lineas)
 
     def _elegir_carpeta(self, variable):
         elegida = filedialog.askdirectory(title="Escoge la carpeta",
@@ -491,49 +495,10 @@ class PanelResultados:
         if elegida:
             variable.set(elegida)
 
-    def _al_cambiar_placa(self, _evento=None):
-        nombre = self._titulo_a_placa.get(self.kit_placa.get())
-        if nombre is None:
-            self.kit_pines.set("")
-            self.kit_pines_entry.config(state="disabled")
-        else:
-            self.kit_pines_entry.config(state="normal")
-            self.kit_pines.set(self._pines_texto.get(nombre, ""))
-        self._actualizar_ejemplo_pines()
-
-    def _al_escribir_pines(self, *_):
-        nombre = self._titulo_a_placa.get(self.kit_placa.get())
-        if nombre is not None:
-            self._pines_texto[nombre] = self.kit_pines.get()
-            self._actualizar_pista()
-
-    def _actualizar_ejemplo_pines(self):
-        """El ejemplo dentro del cuadro de pines dice el orden que se espera."""
-        nombre = self._titulo_a_placa.get(self.kit_placa.get())
-        if nombre is None:
-            self._cambiar_ejemplo_pines("Escoge una placa arriba")
-        else:
-            tabla = self.app._current_table()
-            orden = ", ".join(tabla.variables) + " y luego " + ", ".join(tabla.outputs)
-            self._cambiar_ejemplo_pines(f"En orden: {orden}")
-        self.kit_pines_entry.actualizar_ejemplo()
-        self._actualizar_pista()
-
-    def _actualizar_pista(self):
-        con_pines = [placas.PLACAS_CON_PINES[n]["titulo"]
-                     for n, t in self._pines_texto.items() if t.strip()]
-        self.kit_pista.config(text=("Con pines propios: " + "; ".join(con_pines))
-                              if con_pines else "Vacio = ktool escoge los pines.")
-
-    def _pines_del_kit(self):
-        """{placa: [pines]} de lo escrito. ValueError si un pin no es del tipo."""
-        return {nombre: leer_pines(texto, placas.PLACAS_CON_PINES[nombre])
-                for nombre, texto in self._pines_texto.items() if texto.strip()}
-
     def escribir_kit(self):
-        carpeta = self.kit_carpeta.get().strip()
+        carpeta = self.kit_config.carpeta
         if not carpeta:
-            messagebox.showerror("Falta la carpeta", "Escribe o elige una carpeta.")
+            messagebox.showerror("Falta la carpeta", "Elige la carpeta en Configurar kit.")
             return
         if os.path.isdir(carpeta) and os.listdir(carpeta):
             if not messagebox.askyesno(
@@ -542,18 +507,16 @@ class PanelResultados:
                     "se quedan. Seguir?"):
                 return
         try:
-            resumen = hw_kit.generar(self.app._current_table(), carpeta, self._forma_unica(),
-                                     self._pines_del_kit())
+            kit = self.kit_config.armar(self.app._current_table(), self._forma_unica())
         except ValueError as e:   # un pin o un nombre de salida que no sirve
             messagebox.showerror("No se pudo escribir el kit", str(e))
             return
-        listos = sum(1 for _, estado, _ in resumen if estado == "listo")
-        lineas = [f"{listos} de {len(resumen)} listos, en:", f"  {carpeta}", ""]
-        for plataforma, estado, detalle in resumen:
-            lineas.append(f"ok  {plataforma}" if estado == "listo"
-                          else f"--  {plataforma}: {detalle}")
-        lineas += ["", "Detalle en LEEME.md. Antes de grabar: python python/simular.py"]
-        _escribir_en(self.kit_resumen, lineas)
+        hw_kit.escribir(kit, carpeta)
+        escritos = []
+        for plataforma, estado, detalle in kit.resumen:
+            escritos.append(f"ok  {plataforma}" if estado == "listo"
+                            else f"--  {plataforma}: {detalle}")
+        self._actualizar_resumen_kit(["Escrito:"] + escritos)
         self.kit_abrir.config(state="normal")
 
     # ------------------------------------------------- guardar en el proyecto
@@ -567,8 +530,7 @@ class PanelResultados:
                            "extremos": self.proto_extremos.get(),
                            "separado": self.proto_separado.get(),
                            "color": self.proto_color.get()},
-            "kit": {"carpeta": self.kit_carpeta.get(),
-                    "pines": {n: t for n, t in self._pines_texto.items() if t.strip()}},
+            "kit": self.kit_config.a_dict(),
         }
 
     def desde_dict(self, fuente):
@@ -590,10 +552,5 @@ class PanelResultados:
         self.proto_separado.set(bool(proto.get("separado", False)))
         self.proto_color.set(proto.get("color", ""))
         self._ajustar_entrada_chips()
-        kit = fuente.get("kit") or {}
-        if kit.get("carpeta"):
-            self.kit_carpeta.set(kit["carpeta"])
-        self._pines_texto = {n: t for n, t in (kit.get("pines") or {}).items()
-                             if n in placas.PLACAS_CON_PINES}
-        self.kit_placa.set(SIN_PINES)
-        self._al_cambiar_placa()
+        self.kit_config = ConfigKit.desde_dict(fuente.get("kit"))
+        self._actualizar_resumen_kit()

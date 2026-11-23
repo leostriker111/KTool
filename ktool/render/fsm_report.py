@@ -9,8 +9,9 @@ from __future__ import annotations
 from ..core.simplify import solve_output
 from ..fsm import flipflops
 from . import kmap, circuit, codegen, fsm_diagram
-from ._util import _esc, _attr
-from .report import _CSS, _CLIP_SCRIPT, _kmap_for_form, _seccion_portada, save_report
+from ._util import _esc
+from .report import (_CSS, _CLIP_SCRIPT, _kmap_for_form, _seccion_portada, boton_copiar,
+                     save_report)
 
 _FF_NAME = {"D": "Tipo D", "T": "Tipo T", "JK": "JK", "SR": "SR"}
 
@@ -219,13 +220,13 @@ def _languages(machine, exc_sols, out_sols, langs):
         blob = "\n".join(lines)
         parts.append("<div class='langblock'>"
                      f"<div class='langhead'>{_esc(lang)} "
-                     f"<button class='copybtn' data-clip=\"{_attr(blob)}\">copiar {_esc(lang)}</button></div>"
+                     f"{boton_copiar(blob, lang)}</div>"
                      f"<pre class='langpre'>{_esc(blob)}</pre></div>")
     return "".join(parts)
 
 
 def build_fsm_report(machine, ff_kind="JK", title=None, langs=None, circuit_on=True, form="auto",
-                     portada=None, vhdl=True, fuente=None):
+                     portada=None, vhdl=True, fuente=None, kit_html=""):
     """El documento de una maquina. uente es el dict de la maquina (para el
     estado inicial y el banco de prueba del VHDL); portada, los datos de la
     portada formal (render/report.CAMPOS_PORTADA)."""
@@ -287,6 +288,8 @@ def build_fsm_report(machine, ff_kind="JK", title=None, langs=None, circuit_on=T
 
     if vhdl:
         body.append(_seccion_vhdl(fuente or _a_dict(machine), ff_kind))
+    # el kit de hardware tal como se configuro en su ventana (gui/kit_ventana.py)
+    body.append(kit_html)
 
     html = (f"<!DOCTYPE html><html><head><meta charset='utf-8'>"
             f"<title>{_esc(title)}</title><style>{_CSS}{_EXTRA_CSS}</style></head>"
@@ -330,6 +333,6 @@ def _seccion_vhdl(fuente, ff_kind):
     for titulo, codigo in bloques:
         partes.append(
             f"<details class='guide'><summary>{_esc(titulo)}</summary>"
-            f"<div class='langhead'><button class='copybtn' data-clip=\"{_attr(codigo)}\">"
-            f"copiar</button></div><pre class='langpre'>{_esc(codigo)}</pre></details>")
+            f"<div class='langhead'>{boton_copiar(codigo)}</div>"
+            f"<pre class='langpre'>{_esc(codigo)}</pre></details>")
     return "".join(partes)

@@ -178,11 +178,11 @@ bottom, in five tabs that read the same table and the same form:
 | *Portada* | Title, author, organisation, course, teacher, group, date, reviewed by and approved by. They become a formal cover page with signature lines; empty fields are left out. |
 | *Generar* | A **Contains** list to tick (cover, table, maps, circuits, languages, build, kit) plus what else goes in the folder (the build on its own, the kit folder, the project). One click on *Generar todo* writes it all. |
 | *Protoboard* | The physical build: which chips (faithful to the diagram, only the ones you own, or automatic), what goes on the outputs (LEDs, 7- or 16-segment displays), one board per output or one for all. |
-| *Kit de hardware* | Writes the [hardware kit](#hardware-kit) folder. If your board has LEDs on fixed pins, pick the board and type its pins; each board remembers its own. |
+| *Kit de hardware* | Which boards get generated, on which pins and into which folder, and the button to the [hardware kit](#hardware-kit) window. |
 
-The *Armado* menu jumps straight to *Protoboard* and *Kit de hardware*.
+The *Armado* menu goes to *Protoboard* and opens the kit window. The *Herramientas* menu has the **frequency calculator** (digital divider and 555 astable, with the waveform drawn and a copy button next to every value) and **text to segments** (a message on a 7-, 14- or 16-segment display turned into a truth table). *Insertar > Display* adds 7-, 14- and 16-segment displays, a 10-LED bar or a single LED, lit by the selected row.
 
-**Projects and examples.** *Archivo* saves and opens the whole thing (table, names, cover, every tab's options) as a `.ktool.json`. A copy is saved every few seconds, and anything discarded unsaved goes to a recycle bin you can restore from. *Archivo > Ejemplos* has 24 ready circuits: multiplexer, demultiplexer, decoders, priority encoder, BCD and hex to 7 segments, adders, subtractors, comparator, Gray, two's complement, excess-3, and the exercises from the course labs.
+**Projects and examples.** *Archivo* saves and opens the whole thing (table, names, cover, every tab's options) as a `.ktool.json`. A copy is saved every few seconds, and anything discarded unsaved goes to a recycle bin you can restore from. *Archivo > Ejemplos* has ready circuits: multiplexer, demultiplexer, decoders, priority encoder, BCD and hex to 7 segments, BCD to 14 and 16 segments, the alphabet on 7, 14 and 16 segments, the LED bar, adders, subtractors, comparator, Gray, two's complement, excess-3, the exercises from the course labs and their counters.
 
 **Named inputs.** Click an input header to rename it (`SEL`, `D0`, `EN`): the name reaches equations, maps, document, build and code. Products with long names are written apart (`SEL' D0`), and a name that wouldn't compile in VHDL, Verilog or C is refused on the spot.
 
@@ -283,7 +283,7 @@ ktool -n 4 -m 0,1,2,5 --form nand --hw kit_nand    # the form you ask for
 
 | platform | what you get |
 |---|---|
-| **PIC** 18F4550, 18F45K50, 16F877A, 16F628A, 16F84A | A `.c` for MPLAB X + XC8 with the configuration bits, `_XTAL_FREQ`, the analogue pins switched off the way *each* datasheet asks (`ADCON1 = 0x06` on the 877A, not `0x0F`), and `TRIS`/`LAT` set explicitly. |
+| **PIC** 18F4550, 18F45K50, 16F877A, 16F628A, 16F84A | A `.c` for MPLAB X + XC8 with the configuration bits, `_XTAL_FREQ`, the analogue pins switched off the way *each* datasheet asks (`ADCON1 = 0x06` on the 877A, not `0x0F`), and `TRIS`/`LAT` set explicitly. On the 18F parts, also **the same program in assembly** (`.S` for pic-as, the MPLAB X 6 assembler): each minimised term becomes one bit-mask comparison. |
 | **ESP32** WROOM-32, S3, C3 | An Arduino sketch and a MicroPython `main.py`, sharing one pin layout. |
 | **Arduino** Uno/Nano, or Mega 2560 | The Uno when it fits; when it doesn't, the Mega, automatically. |
 | **STM32** Blue Pill | A sketch for STM32duino. The inputs sit on 5 V-tolerant pins. |
@@ -300,7 +300,7 @@ code.** The kit's `LEEME.md` gives the exact count:
 ```text
 -- ESP32-C3 (DevKitM-1 / SuperMini)
    Variante bloqueada: requiere 6 entradas + 10 salidas = 16 pines y ESP32-C3
-   (DevKitM-1 / SuperMini) solo tiene 13 utilizables (8 seguros + 5 de reserva)
+   (DevKitM-1 / SuperMini) solo tiene 13 utilizables (4 seguros + 9 de reserva)
 -- PIC16F84A
    Variante bloqueada: el programa necesitaria unas 1325 palabras (128 terminos)
    y el PIC16F84A tiene 1024; usa uno con mas memoria
@@ -313,15 +313,15 @@ carries a warning next to them.
 
 **How it was checked.** Every file was put through the real tool for its platform, on 21 generated circuits (2 to 6 inputs, 1 to 24 outputs, every form, the worst cases for memory included): **88 PIC files** compiled with XC8 v3.10 with no errors or warnings; **21 Arduino sketches** (Uno or Mega) compiled with `arduino-cli`, and **31 ESP32 (WROOM-32, S3, C3) and Blue Pill sketches** from a sample of 8 circuits; **42 test benches** run in GHDL (VHDL) and Icarus Verilog, every combination matching the truth table; and the 21 Python simulations. On top of that the test suite checks the logic of each output (the C equation, the PIC's bit masks, the MicroPython file run against a fake `machine` module) row by row on about 150 random tables. Details in [docs/HARDWARE.md](docs/HARDWARE.md).
 
-**In the window too.** The *Kit de hardware* tab writes the kit for the table on
-screen. That is the way to get **several outputs**, which the command line can't
-take. Fixed pins work for **any board** in the list, not just the MAX II, and the
-*Documento* tab can put the whole kit (pin tables and every file) inside the HTML.
-From the command line: `--pines max2=26,28,33 --pines uno_nano=2,3,8` and
-`--kit-en-documento`.
+**In the window.** *Armado > Kit de hardware* opens a window in three parts:
 
-The hardware kit covers **combinational** circuits. State machines have their
-own section, below.
+- **Platforms.** Tick the ones to generate; by default the PIC18F45K50, the MAX II, the Arduino Uno and the Python simulation.
+- **Pins.** A planner in the spirit of Quartus' *Pin Planner*. It draws the real part: the PIC in its DIP-40, the MAX II in its TQFP-100 with its I/O banks, the Arduino with its headers. Click a signal and then a pin, or drag it there. Power, JTAG and flash pins are refused, and reserved ones say why.
+- **Settings and files.** The settings that depend on the board: language (C, assembly or both) and oscillator of the PIC, MCLR as reset or as an input, active-low inputs and outputs, `INPUT_PULLUP` on Arduino, and the clock and target frequency of the MAX II. Next to them, a preview of every file, editable by hand. Edits survive regeneration.
+
+All of it is saved in the project, and the document describes it as it is: the boards, the drawing of the part with its assigned pins, the settings and the files (hand-edited ones are marked). So even when the kit is written out as loose files first, the final report says exactly what was flashed. From the command line: `--pines max2=26,28,33 --pines uno_nano=2,3,8` and `--kit-en-documento`.
+
+State machines have a kit of their own, in the section below.
 
 ## State machines and counters
 
@@ -350,6 +350,8 @@ entity, so one generated test bench checks any of them, cycle by cycle.
 In the window, the *Secuencial* menu opens the state-machine editor (states and
 transitions as tables, with a live graph) and a *Contador…* dialog. *Archivo >
 Ejemplos > Contadores* has the counters from the lab already set up.
+
+**The machine's kit.** The editor's *Kit de hardware…* button opens the same kit window, with the machine: PIC 18F in C and in assembly (next state by table), Arduino with `delay()` or `millis()`, and the MAX II with the divider from the 50 MHz clock to the chosen frequency, the reset with its polarity and the clock on a GCLK pin. The frequency goes in *Ajustes* or comes from the calculator. With *Kit en el reporte* ticked, the document includes the kit and each board's clock calculation with its waveform. Checked on the 10 machines: 40 PIC programs in C and 40 in assembly, 40 Arduino sketches and 120 simulations of the MAX II top level in GHDL, compared cycle by cycle, with no warnings.
 
 **How it was checked.** The 8 counters from the lab plus 2 more machines, each
 in the 3 methods and with the 4 flip-flop types: **60 GHDL simulations** in
@@ -423,7 +425,7 @@ a rendered PDF.
 
 ### The modules
 
-About 2,400 lines, split by job.
+About 16,000 lines, split by job.
 
 <details open>
 <summary><b>core — the maths</b></summary>
@@ -464,7 +466,13 @@ About 2,400 lines, split by job.
 | module | lines | what it does |
 |---|--:|---|
 | `gui/app.py` | 680 | The window and the spreadsheet-like table. |
-| `gui/displays.py` | 89 | Showing the results in the lower panel. |
+| `gui/displays.py` | 162 | The 7-, 14- and 16-segment displays, the 10-LED bar and the LED, lit by the active row. |
+| `gui/resultados.py` | 497 | The Resultados panel: equations, cover, Generar, breadboard and the kit summary. |
+| `gui/kit_ventana.py` | 391 | The kit window: platforms, pins, settings and the editable preview. |
+| `gui/pin_planner.py` | 531 | The pin planner on top of the drawing of the part. |
+| `gui/calculadora.py` | 291 | The frequency calculator, with the waveform and the code for each board. |
+| `gui/texto_segmentos.py` | 141 | A message turned into a truth table for a display. |
+| `gui/fsm_view.py` | 515 | The state machine editor. |
 | `cli.py` | 134 | Argument parsing and the pipeline. |
 | `theme.py` | 23 | Colours shared between the window and the report. |
 
@@ -481,7 +489,15 @@ About 2,400 lines, split by job.
 | `hw/modelo.py` | 250 | The solved circuit, the equation written with *every* parenthesis (C, Python, VHDL and Verilog all order operators differently), and the pin allocator that blocks with an exact count. |
 | `hw/micros.py` | 413 | PIC, ESP32, Arduino, Blue Pill and Pico. On the PIC each term becomes a bit-mask comparison, so the circuit fits in a 16F84A's 1K words. |
 | `hw/logica.py` | 502 | VHDL, Verilog, both test benches, the Quartus files, the GAL22V10, the 74LS bill of materials (reusing the breadboard netlist) and the Python simulation. |
-| `hw/kit.py` | 197 | Writes the folder and the summary of what was generated and what was blocked. |
+| `hw/kit.py` | 326 | Builds the kit for the chosen platforms and the summary of what was generated and what was blocked. |
+| `hw/ajustes.py` | 173 | Each board's settings (oscillator, polarity, clock, frequency), only the ones the generator honours. |
+| `hw/configuracion.py` | 114 | Boards, pins, settings and hand-edited files: what the window, the kit and the document all read. |
+| `hw/encapsulados.py` | 1282 | The drawing of each part (DIP, TQFP-100, each board's headers), with the source of every pinout. |
+| `hw/asm.py` | 451 | The PIC 18F in assembly for pic-as, combinational and state machines. |
+| `hw/reloj.py` | 957 | Frequency dividers, the 555 and delays in VHDL, C, assembly and Arduino. |
+| `hw/vhdl_fsm.py` | 326 | State machines in VHDL by the three methods, with their test bench. |
+| `hw/kit_fsm.py` | 1176 | The state machine kit: PIC in C and assembly, Arduino and the MAX II with its divider. |
+| `segmentos.py` | 533 | The 7-, 14- and 16-segment fonts and text turned into a table. |
 
 </details>
 

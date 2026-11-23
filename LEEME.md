@@ -181,11 +181,11 @@ pestañas que leen la misma tabla y la misma forma:
 | *Portada* | Título, autor, organización, materia, profesor, secuencia, fecha, revisó y autorizó. Sale como portada formal con líneas de firma; lo vacío no aparece. |
 | *Generar* | Una lista **Contiene** palomeable (portada, tabla, mapas, circuitos, lenguajes, armado, kit) y lo que además se guarda en la carpeta (el armado aparte, la carpeta del kit, el proyecto). Un clic en *Generar todo* lo escribe todo. |
 | *Protoboard* | El armado físico: qué chips (fiel al diagrama, solo los que tienes, o automático), qué va en las salidas (LEDs, displays de 7 o 16 segmentos), una protoboard por salida o una para todo. |
-| *Kit de hardware* | Escribe la carpeta del [kit de hardware](#kit-de-hardware). Si tu placa trae LEDs en pines fijos, eliges la placa y escribes sus pines; cada placa recuerda los suyos. |
+| *Kit de hardware* | Qué placas se generan, con qué pines y en qué carpeta, y el botón a la ventana del [kit de hardware](#kit-de-hardware). |
 
-El menú *Armado* lleva directo a *Protoboard* y a *Kit de hardware*.
+El menú *Armado* lleva a *Protoboard* y abre la ventana del kit. El menú *Herramientas* trae la **calculadora de frecuencia** (divisor digital y 555 astable, con la onda dibujada y cada dato con su botón de copiar) y **texto a segmentos** (un mensaje en display de 7, 14 o 16 segmentos convertido en tabla). *Insertar > Display* agrega displays de 7, 14 y 16 segmentos, una barra de 10 LEDs o un LED, que se encienden con la fila seleccionada.
 
-**Proyectos y ejemplos.** *Archivo* guarda y abre todo (tabla, nombres, portada y las opciones de cada pestaña) como `.ktool.json`. Cada pocos segundos se guarda una copia, y lo que descartas sin guardar va a una papelera de la que se recupera. *Archivo > Ejemplos* trae 24 circuitos listos: multiplexor, demultiplexor, decodificadores, codificador de prioridad, BCD y hexadecimal a 7 segmentos, sumadores, restadores, comparador, Gray, complemento a 2, exceso-3 y los ejercicios de las prácticas.
+**Proyectos y ejemplos.** *Archivo* guarda y abre todo (tabla, nombres, portada y las opciones de cada pestaña) como `.ktool.json`. Cada pocos segundos se guarda una copia, y lo que descartas sin guardar va a una papelera de la que se recupera. *Archivo > Ejemplos* trae circuitos listos: multiplexor, demultiplexor, decodificadores, codificador de prioridad, BCD y hexadecimal a 7 segmentos, BCD a 14 y 16 segmentos, el alfabeto en 7, 14 y 16 segmentos, la barra de LEDs, sumadores, restadores, comparador, Gray, complemento a 2, exceso-3, los ejercicios de las prácticas y sus contadores.
 
 **Entradas con nombre.** Clic en el encabezado de una entrada para renombrarla (`SEL`, `D0`, `EN`): el nombre llega a ecuaciones, mapas, documento, armado y código. Con nombres largos los productos se escriben separados (`SEL' D0`), y un nombre que no compilaría en VHDL, Verilog o C se rechaza en el momento.
 
@@ -287,7 +287,7 @@ ktool -n 4 -m 0,1,2,5 --form nand --hw kit_nand    # en la forma que pidas
 
 | plataforma | qué sale |
 |---|---|
-| **PIC** 18F4550, 18F45K50, 16F877A, 16F628A, 16F84A | Un `.c` para MPLAB X + XC8 con los bits de configuración, `_XTAL_FREQ`, lo analógico apagado como lo pide la hoja de datos de *cada* chip (`ADCON1 = 0x06` en el 877A, no `0x0F`) y `TRIS`/`LAT` puestos a mano. |
+| **PIC** 18F4550, 18F45K50, 16F877A, 16F628A, 16F84A | Un `.c` para MPLAB X + XC8 con los bits de configuración, `_XTAL_FREQ`, lo analógico apagado como lo pide la hoja de datos de *cada* chip (`ADCON1 = 0x06` en el 877A, no `0x0F`) y `TRIS`/`LAT` puestos a mano. En los 18F, además, **el mismo programa en ensamblador** (`.S` para pic-as, el ensamblador de MPLAB X 6): cada término minimizado es una comparación de máscara. |
 | **ESP32** WROOM-32, S3, C3 | Un sketch de Arduino y un `main.py` de MicroPython, con el mismo acomodo de pines. |
 | **Arduino** Uno/Nano, o Mega 2560 | El Uno si cabe; si no, el Mega, solo. |
 | **STM32** Blue Pill | Un sketch para STM32duino. Las entradas van en pines tolerantes a 5 V. |
@@ -304,7 +304,7 @@ ktool -n 4 -m 0,1,2,5 --form nand --hw kit_nand    # en la forma que pidas
 ```text
 -- ESP32-C3 (DevKitM-1 / SuperMini)
    Variante bloqueada: requiere 6 entradas + 10 salidas = 16 pines y ESP32-C3
-   (DevKitM-1 / SuperMini) solo tiene 13 utilizables (8 seguros + 5 de reserva)
+   (DevKitM-1 / SuperMini) solo tiene 13 utilizables (4 seguros + 9 de reserva)
 -- PIC16F84A
    Variante bloqueada: el programa necesitaria unas 1325 palabras (128 terminos)
    y el PIC16F84A tiene 1024; usa uno con mas memoria
@@ -317,15 +317,15 @@ tabla de pines lleva el aviso junto a ellos.
 
 **Cómo se comprobó.** Cada archivo pasó por la herramienta real de su plataforma, sobre 21 circuitos generados (de 2 a 6 entradas, de 1 a 24 salidas, en todas las formas, incluidos los peores casos de memoria): **88 archivos de PIC** compilados con XC8 v3.10 sin errores ni advertencias; **21 sketches de Arduino** (Uno o Mega) compilados con `arduino-cli`, y **31 sketches de ESP32 (WROOM-32, S3, C3) y Blue Pill** de una muestra de 8 circuitos; **42 bancos de prueba** corridos en GHDL (VHDL) e Icarus Verilog, con todas las combinaciones iguales a la tabla de verdad; y las 21 simulaciones en Python. Encima, las pruebas revisan la lógica de cada salida (la ecuación en C, las máscaras del PIC, el archivo de MicroPython corrido con un `machine` de mentira) fila por fila en unas 150 tablas al azar. El detalle está en [docs/HARDWARE.md](docs/HARDWARE.md).
 
-**También en la ventana.** La pestaña *Kit de hardware* escribe el kit de la tabla
-que tienes en pantalla. Es la forma de sacar **varias salidas**, que la línea de
-comandos no permite. Los pines fijos sirven para **cualquier placa** de la lista,
-no solo la MAX II, y la pestaña *Documento* puede meter el kit completo (tablas de
-pines y cada archivo) dentro del HTML. Desde la terminal:
-`--pines max2=26,28,33 --pines uno_nano=2,3,8` y `--kit-en-documento`.
+**En la ventana.** *Armado > Kit de hardware* abre una ventana con tres partes:
 
-El kit de hardware es para circuitos **combinacionales**. Las máquinas de estado
-tienen su propia sección, abajo.
+- **Plataformas.** Palomeas cuáles se generan; de entrada, el PIC18F45K50, la MAX II, el Arduino Uno y la simulación en Python.
+- **Pines.** Un planificador al estilo del *Pin Planner* de Quartus. Dibuja el componente real: el PIC en su DIP-40, la MAX II en su TQFP-100 con sus bancos y el Arduino con sus cabezales. Le das clic a una señal y luego a la pata, o la arrastras. Las patas de alimentación, JTAG o de la flash no se dejan, y las de reserva avisan por qué.
+- **Ajustes y archivos.** Los ajustes que cambian según la placa: lenguaje (C, ensamblador o los dos) y oscilador del PIC, MCLR como reset o como entrada, entradas y salidas activas en bajo, `INPUT_PULLUP` en Arduino, y el reloj y la frecuencia de la MAX II. Al lado, la vista previa de cada archivo, que se puede corregir a mano. Lo corregido se conserva al regenerar.
+
+Todo eso se guarda en el proyecto, y el documento lo describe tal cual: las placas, el dibujo del componente con sus patas asignadas, los ajustes y los archivos (con los editados marcados). Así, aunque el kit se escriba primero como archivos sueltos, el reporte final dice exactamente lo que se grabó. Desde la terminal: `--pines max2=26,28,33 --pines uno_nano=2,3,8` y `--kit-en-documento`.
+
+Las máquinas de estado tienen su propio kit, en la sección de abajo.
 
 ## Máquinas de estado y contadores
 
@@ -356,6 +356,8 @@ prueba generado revisa cualquiera de ellos, ciclo por ciclo.
 En la ventana, el menú *Secuencial* abre el editor de máquinas (estados y
 transiciones en tablas, con el grafo en vivo) y un diálogo *Contador…*. *Archivo >
 Ejemplos > Contadores* trae ya armados los contadores de la práctica.
+
+**El kit de la máquina.** El botón *Kit de hardware…* del editor abre la misma ventana del kit, con la máquina: PIC 18F en C y en ensamblador (el siguiente estado por tabla), Arduino con `delay()` o `millis()`, y la MAX II con el divisor del reloj de 50 MHz a la frecuencia elegida, el reset con su polaridad y el reloj en una pata GCLK. La frecuencia se pone en *Ajustes* o con la calculadora. Con *Kit en el reporte* palomeado, el documento trae el kit y el cálculo del reloj de cada placa con su onda. Se comprobó con las 10 máquinas: 40 programas de PIC en C y 40 en ensamblador, 40 sketches de Arduino y 120 simulaciones del nivel superior de la MAX II en GHDL, comparadas ciclo por ciclo, sin una advertencia.
 
 **Cómo se comprobó.** Los 8 contadores de la práctica y 2 máquinas más, cada uno
 por los 3 métodos y con los 4 tipos de flip-flop: **60 simulaciones en GHDL** en
@@ -430,7 +432,7 @@ archivo HTML y no un PDF renderizado.
 
 ### Los módulos
 
-Unas 2,400 líneas, repartidas por trabajo.
+Unas 16,000 líneas, repartidas por trabajo.
 
 <details open>
 <summary><b>core — las matemáticas</b></summary>
@@ -471,7 +473,13 @@ Unas 2,400 líneas, repartidas por trabajo.
 | módulo | líneas | qué hace |
 |---|--:|---|
 | `gui/app.py` | 680 | La ventana y la tabla tipo hoja de cálculo. |
-| `gui/displays.py` | 89 | Mostrar los resultados en el panel de abajo. |
+| `gui/displays.py` | 162 | Los displays de 7, 14 y 16 segmentos, la barra de 10 LEDs y el LED, encendidos por la fila activa. |
+| `gui/resultados.py` | 497 | El panel de Resultados: ecuaciones, portada, Generar, protoboard y el resumen del kit. |
+| `gui/kit_ventana.py` | 391 | La ventana del kit: plataformas, pines, ajustes y la vista previa editable. |
+| `gui/pin_planner.py` | 531 | El planificador de pines sobre el dibujo del componente. |
+| `gui/calculadora.py` | 291 | La calculadora de frecuencia, con la onda y el código por hardware. |
+| `gui/texto_segmentos.py` | 141 | Un mensaje convertido en tabla para un display. |
+| `gui/fsm_view.py` | 515 | El editor de máquinas de estado. |
 | `cli.py` | 134 | Los argumentos y la tubería. |
 | `theme.py` | 23 | Los colores que comparten la ventana y el reporte. |
 
@@ -488,7 +496,15 @@ Unas 2,400 líneas, repartidas por trabajo.
 | `hw/modelo.py` | 250 | El circuito resuelto, la ecuación escrita con *todos* los paréntesis (C, Python, VHDL y Verilog ordenan los operadores distinto) y el reparto de pines que bloquea con la cuenta exacta. |
 | `hw/micros.py` | 413 | PIC, ESP32, Arduino, Blue Pill y Pico. En el PIC cada término es una comparación de máscara de bits, y así el circuito cabe en las 1K palabras de un 16F84A. |
 | `hw/logica.py` | 502 | VHDL, Verilog, los dos bancos de prueba, los archivos de Quartus, la GAL22V10, la lista de materiales 74LS (reusa el netlist del protoboard) y la simulación en Python. |
-| `hw/kit.py` | 197 | Escribe la carpeta y el resumen de qué se generó y qué se bloqueó. |
+| `hw/kit.py` | 326 | Arma el kit de las plataformas elegidas y el resumen de qué se generó y qué se bloqueó. |
+| `hw/ajustes.py` | 173 | Los ajustes de cada placa (oscilador, polaridad, reloj, frecuencia), solo los que el generador respeta. |
+| `hw/configuracion.py` | 114 | Placas, pines, ajustes y archivos editados: lo que leen la ventana, el kit y el documento. |
+| `hw/encapsulados.py` | 1282 | El dibujo de cada componente (DIP, TQFP-100, cabezales de cada placa), con la fuente de cada pinout. |
+| `hw/asm.py` | 451 | El PIC 18F en ensamblador para pic-as, combinacional y de máquinas de estado. |
+| `hw/reloj.py` | 957 | Divisores de frecuencia, el 555 y los retardos en VHDL, C, ensamblador y Arduino. |
+| `hw/vhdl_fsm.py` | 326 | Las máquinas de estado en VHDL por los tres métodos, con su banco de prueba. |
+| `hw/kit_fsm.py` | 1176 | El kit de las máquinas de estado: PIC en C y ensamblador, Arduino y la MAX II con su divisor. |
+| `segmentos.py` | 533 | Las tipografías de 7, 14 y 16 segmentos y el texto convertido en tabla. |
 
 </details>
 

@@ -22,7 +22,9 @@ from ..core import ast as expr
 from ..hw.modelo import validar_nombres
 from ..render import codegen
 from . import ayuda
-from .displays import DisplayWidget
+from .displays import DisplayWidget, display_desde_dict, display_de_salidas
+from ..hw import ajustes as hw_ajustes
+from .texto_segmentos import VentanaTextoASegmentos
 from .resultados import PanelResultados, con_ejemplo, nombre_de_archivo
 
 from .. import theme
@@ -185,8 +187,10 @@ class App:
 
         m_ins = tk.Menu(menubar, tearoff=0)
         m_disp = tk.Menu(m_ins, tearoff=0)
-        m_disp.add_command(label="7 segmentos", command=lambda: self.insert_display("7seg"))
-        m_disp.add_command(label="LED", command=lambda: self.insert_display("led"))
+        for tipo, texto in (("7seg", "7 segmentos"), ("14seg", "14 segmentos"),
+                            ("16seg", "16 segmentos"), ("barra10", "Barra de 10 LEDs"),
+                            ("led", "LED")):
+            m_disp.add_command(label=texto, command=lambda t=tipo: self.insert_display(t))
         m_ins.add_cascade(label="Display", menu=m_disp)
         m_ins.add_separator()
         m_ins.add_command(label="Quitar todos", command=self.clear_displays)
@@ -197,9 +201,15 @@ class App:
         m_armado = tk.Menu(menubar, tearoff=0)
         m_armado.add_command(label="Armado en protoboard...",
                              command=lambda: self.resultados.mostrar("protoboard"))
-        m_armado.add_command(label="Kit de hardware...",
-                             command=lambda: self.resultados.mostrar("kit"))
+        m_armado.add_command(label="Kit de hardware...", command=lambda: self.resultados.abrir_kit())
         menubar.add_cascade(label="Armado", menu=m_armado)
+
+        # calculos que no dependen de la tabla, pero que terminan en ella o en el kit
+        m_herr = tk.Menu(menubar, tearoff=0)
+        m_herr.add_command(label="Calculadora de frecuencia...", command=self.calculadora)
+        m_herr.add_command(label="Texto a segmentos...",
+                           command=lambda: VentanaTextoASegmentos(self.root, self._crear_desde_texto))
+        menubar.add_cascade(label="Herramientas", menu=m_herr)
 
         # maquinas de estado: el editor cubre la tabla (con su boton Volver)
         m_sec = tk.Menu(menubar, tearoff=0)
@@ -844,7 +854,7 @@ class App:
             "notes_on": bool(self.notes_on.get()),
             "notes": notas,
             "form": self.form.get(),
-            "displays": [d.kind for d in self.displays],
+            "displays": [d.a_dict() for d in self.displays],
         }
         fuente.update(self.resultados.a_dict())
         return fuente
@@ -869,10 +879,13 @@ class App:
                 e.delete(0, tk.END)
                 e.insert(0, notas[r])
         self.clear_displays()
-        for tipo in fuente.get("displays", []):
-            tipo = tipo.get("kind", "7seg") if isinstance(tipo, dict) else tipo
-            if tipo in ("7seg", "led"):
-                self.insert_display(tipo)
+        for datos in fuente.get("displays", []):
+            d = display_desde_dict(self, self.disp_inner, datos)
+            if d is not None:
+                self.displays.append(d)
+        if self.displays:
+            self._disp_hint.pack_forget()
+            self._refresh_displays()
         self.resultados.desde_dict(fuente)
         self.resultados.mostrar("ecuaciones")
         self.resultados.actualizar_ecuaciones()
@@ -979,12 +992,45 @@ class App:
         if proyecto.get("doc_type") == "fsm":   # los contadores van a su editor
             self.editor_fsm().cargar(proyecto)
             return
+        self._abrir_como_nuevo(proyecto)
+
+    def _crear_desde_texto(self, proyecto):
+        """Herramientas > Texto a segmentos: la tabla del mensaje, como proyecto nuevo."""
+        self._abrir_como_nuevo(proyecto)
+
+    def _abrir_como_nuevo(self, proyecto):
+        """Carga un proyecto que no viene de un archivo (ejemplo o tabla creada).
+
+        Si es de un display y no trae ninguno insertado, se inserta el que le
+        corresponde, para ver el resultado al moverse por la tabla."""
         if not self._puede_descartar():
             return
+        if not proyecto.get("displays"):
+            tipo = display_de_salidas(proyecto.get("output_names") or [])
+            if tipo:
+                proyecto = dict(proyecto, displays=[{"kind": tipo}])
         self.aplicar(proyecto)
         self._marcar_guardado(None)
-        self._guardado = None          # un ejemplo cuenta como cambio sin guardar
+        self._guardado = None          # cuenta como cambio sin guardar
         self._actualizar_titulo()
+
+    def calculadora(self):
+        """Herramientas > Calculadora de frecuencia. 'Usar en el kit' pone la
+        frecuencia en las placas marcadas del kit que la tienen (y en la MAX II,
+        tambien el reloj de la tarjeta)."""
+        from .calculadora import VentanaCalculadora
+        config = self.resultados.kit_config
+
+        def usar(f_salida, f_entrada):
+            for placa in config.elegidas:
+                claves = [a.clave for a in hw_ajustes.de(placa)]
+                if "frecuencia_hz" in claves:
+                    config.ajustes.setdefault(placa, {})["frecuencia_hz"] = f"{f_salida:g}"
+                if "reloj_hz" in claves:
+                    config.ajustes[placa]["reloj_hz"] = f"{f_entrada:g}"
+            self.resultados._actualizar_resumen_kit()
+
+        VentanaCalculadora(self.root, al_usar=usar, destino="las placas marcadas del kit")
 
     def editor_fsm(self):
         """El editor de maquinas de estado (gui/fsm_view.py), creado una sola vez."""

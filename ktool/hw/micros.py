@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from .. import __version__
 from ..core.simplify import format_product, format_sum, literal_pairs
-from . import placas
+from . import ajustes, placas
 from .modelo import ecuacion, tabla_de_pines
 
 
@@ -108,6 +108,27 @@ OSCILADOR_PIC = {
 }
 
 
+# Bits IRCF de OSCCON (bits 6-4) para cada frecuencia del oscilador interno.
+# Hojas de datos: PIC18F45K50 registro 3-1 (HFINTOSC) y PIC18F4550 registro 2-2
+# (INTOSC). En el 4550 SCS = 10 elige el oscilador interno; en el K50 basta con
+# SCS = 00, porque la palabra de configuracion ya dice FOSC = INTOSCIO.
+IRCF_PIC18 = {
+    "pic18f45k50": {16000000: 7, 8000000: 6, 4000000: 5, 2000000: 4, 1000000: 3,
+                    500000: 2, 250000: 1, 31000: 0},
+    "pic18f4550": {8000000: 7, 4000000: 6, 2000000: 5, 1000000: 4, 500000: 3,
+                   250000: 2, 125000: 1, 31000: 0},
+}
+
+
+def osccon_pic18(chip, frecuencia):
+    """La linea de C que pone el oscilador interno a `frecuencia` (en Hz)."""
+    ircf = IRCF_PIC18[chip][frecuencia]
+    scs = 0b10 if chip == "pic18f4550" else 0b00
+    valor = (ircf << 4) | scs
+    return (f"    OSCCON = 0x{valor:02X};      // IRCF = {ircf:03b}: oscilador interno a "
+            f"{ajustes.hz_texto(frecuencia)}")
+
+
 def _puerto(pin):
     """'RB3' -> ('B', 3)"""
     return pin[1], int(pin[2])
@@ -187,11 +208,60 @@ def _pasos_pic(circuito, salida):
     return lineas
 
 
-def pic(circuito, chip, renglones):
-    """Archivo .c completo para XC8."""
+def reloj_pic(chip, valores):
+    """(frecuencia en Hz, texto del reloj, linea de OSCCON) segun los ajustes.
+
+    Los PIC 18F eligen su oscilador interno en la ventana del kit; los demas
+    usan el de placas.py (cristal o interno fijo)."""
+    info = placas.PIC[chip]
+    if chip in IRCF_PIC18 and "oscilador" in valores:
+        frecuencia = ajustes.hz(valores["oscilador"])
+        texto = f"oscilador interno a {valores['oscilador']} (no hace falta cristal)"
+        return frecuencia, texto, osccon_pic18(chip, frecuencia)
+    return info["xtal"], info["reloj"], OSCILADOR_PIC[chip]
+
+
+def config_pic(chip, valores):
+    """Los bits de configuracion, con MCLR como entrada si asi se pidio."""
+    texto = CONFIG_PIC[chip]
+    if valores.get("mclr") == "entrada RE3":
+        texto = texto.replace(
+            "#pragma config MCLRE = ON           // la pata 1 es el reset (pon 10 kOhm a VDD)",
+            "#pragma config MCLRE = OFF          // la pata 1 es la entrada RE3 (sin reset externo)")
+    return texto
+
+
+def pullups_pic(chip, entradas):
+    """Las lineas que encienden las pull-up internas de PORTB, si hay entradas ahi.
+
+    Solo PORTB las tiene. Con entradas activas en bajo, un boton a GND en RB0-RB7
+    no necesita resistencia; en otro puerto si (10 kOhm a VDD)."""
+    mascara = 0
+    for r in entradas:
+        p, bit = _puerto(r["pin"])
+        if p == "B":
+            mascara |= 1 << bit
+    if not mascara:
+        return []
+    if chip == "pic18f45k50":
+        return [f"    WPUB = 0x{mascara:02X};        // pull-up interna solo en las entradas de PORTB",
+                "    INTCON2bits.nRBPU = 0;  // habilita las pull-up de PORTB"]
+    return ["    INTCON2bits.RBPU = 0;   // habilita las pull-up de PORTB (todas)"]
+
+
+def pic(circuito, chip, renglones, valores=None):
+    """Archivo .c completo para XC8.
+
+    `valores`: los ajustes de la placa (hw/ajustes.py), ya completos. Sin ellos
+    sale como siempre: entradas y salidas activas en alto y el reloj de placas.py.
+    """
+    valores = valores or {}
     info = placas.PIC[chip]
     pic18 = info["familia"] == 18
     puertos = ["A", "B"] if info["patas"] is placas.PATAS_PIC_18 else ["A", "B", "C", "D", "E"]
+    frecuencia, texto_reloj, linea_oscilador = reloj_pic(chip, valores)
+    entradas_en_bajo = ajustes.entradas_invertidas(valores)
+    salidas_en_bajo = ajustes.salidas_invertidas(valores)
 
     def pata(pin):
         return f"{pin} (pata {info['patas'][pin]})"
@@ -213,11 +283,21 @@ def pic(circuito, chip, renglones):
         p, bit = _puerto(r["pin"])
         salidas_por_puerto.setdefault(p, []).append((bit, r["senal"]))
 
+    if entradas_en_bajo:
+        nota_entradas = (" * Entradas activas en bajo: cada boton va de la pata a GND. En PORTB\n"
+                         " * se usa la pull-up interna; en otro puerto, 10 kOhm a VDD.")
+    else:
+        nota_entradas = (" * Cada entrada necesita su resistencia de 10 kOhm a GND (pull-down) para no\n"
+                         " * quedar flotando cuando el interruptor esta abierto.")
+    if salidas_en_bajo:
+        nota_entradas += ("\n * Salidas activas en bajo: el LED va de VDD a la pata (con su resistencia)\n"
+                          " * y enciende cuando la ecuacion vale 1.")
+
     lineas = [f"""\
 /*
  * {circuito.nombre} en {info['titulo']} -- generado por ktool {__version__}
  * Compilador: MPLAB XC8 (proyecto de MPLAB X para {info['titulo']}).
- * Reloj: {info['reloj']}.
+ * Reloj: {texto_reloj}.
  *
  * Ecuaciones:
 {_ecuaciones_comentadas(circuito, ' *')}
@@ -225,22 +305,21 @@ def pic(circuito, chip, renglones):
  * Mapeo de pines:
 {tabla_de_pines(renglones, ' *', pata)}
  *
- * Cada entrada necesita su resistencia de 10 kOhm a GND (pull-down) para no
- * quedar flotando cuando el interruptor esta abierto.
+{nota_entradas}
  */
 
 #include <xc.h>
 #include <stdint.h>
 
-{CONFIG_PIC[chip]}
+{config_pic(chip, valores)}
 
-#define _XTAL_FREQ {info['xtal']}UL
+#define _XTAL_FREQ {frecuencia}UL
 
 // Explicito antes de entrar al ciclo: reloj, lo analogico apagado y la
 // direccion de cada pata.
 static void configurar(void)
 {{
-{OSCILADOR_PIC[chip]}
+{linea_oscilador}
 {ANALOGICO_PIC[chip]}
 """]
     for p in puertos:
@@ -249,6 +328,8 @@ static void configurar(void)
     for p in puertos:
         nota = "  // 1 = entrada, 0 = salida" if p == puertos[0] else ""
         lineas.append(f"    TRIS{p} = 0x{tris[p]:02X};{nota}")
+    if entradas_en_bajo and pic18:
+        lineas.extend(pullups_pic(chip, entradas))
     lineas.append("}\n")
 
     n = circuito.n_entradas
@@ -259,9 +340,12 @@ static void configurar(void)
     # "fila__" con doble guion bajo: ningun nombre de senal puede tenerlo
     # (validar_nombres lo prohibe), asi que nunca choca con una entrada X.
     lineas.append("        uint8_t fila__ = 0;")
+    if entradas_en_bajo:
+        lineas.append("        // activas en bajo: la pata en 0 (boton presionado) cuenta como 1")
+    negar = "!" if entradas_en_bajo else ""
     for k, r in enumerate(entradas):
         p, bit = _puerto(r["pin"])
-        lineas.append(f"        if (PORT{p}bits.R{p}{bit}) fila__ |= 0x{1 << (n - 1 - k):02X};"
+        lineas.append(f"        if ({negar}PORT{p}bits.R{p}{bit}) fila__ |= 0x{1 << (n - 1 - k):02X};"
                       f"   // {r['senal']}")
     lineas.append("\n        // 2. evaluar: cada termino minimizado es una mascara (que variables")
     lineas.append("        //    mira) y un valor (como deben estar). Es la misma ecuacion de")
@@ -269,10 +353,15 @@ static void configurar(void)
     for s in circuito.salidas:
         lineas.extend("        " + paso for paso in _pasos_pic(circuito, s))
     lineas.append("\n        // 3. escribir cada puerto de un golpe (sin leer-modificar-escribir)")
+    if salidas_en_bajo:
+        lineas.append("        //    activas en bajo: se escribe el complemento de cada salida")
     for p in puertos:
         if p not in salidas_por_puerto:
             continue
-        partes = " | ".join(f"(out_{s} << {bit})" for bit, s in salidas_por_puerto[p])
+        if salidas_en_bajo:
+            partes = " | ".join(f"((out_{s} ^ 1u) << {bit})" for bit, s in salidas_por_puerto[p])
+        else:
+            partes = " | ".join(f"(out_{s} << {bit})" for bit, s in salidas_por_puerto[p])
         lineas.append(f"        {escritura}{p} = (uint8_t)({partes});")
     lineas.append("    }\n}\n")
     return "\n".join(lineas)
@@ -280,12 +369,15 @@ static void configurar(void)
 
 # ========================================================= estilo Arduino
 
-def arduino(circuito, renglones, titulo, nucleo, constante, modo_entrada, notas):
+def arduino(circuito, renglones, titulo, nucleo, constante, modo_entrada, notas,
+            entradas_en_bajo=False, salidas_en_bajo=False):
     """Sketch .ino para cualquier nucleo de Arduino (AVR, ESP32, STM32duino).
 
     constante(pin)     como se escribe el pin en C++ ('13', 'A0', 'PB12')
-    modo_entrada(pin)  'INPUT_PULLDOWN' o 'INPUT'
+    modo_entrada(pin)  'INPUT_PULLDOWN', 'INPUT' o 'INPUT_PULLUP'
     notas              renglones extra para el encabezado
+    entradas_en_bajo   el boton presionado lee LOW y cuenta como 1
+    salidas_en_bajo    un 1 de la ecuacion se escribe LOW (LED a VCC)
     """
     entradas = [r for r in renglones if r["direccion"] == "entrada"]
     salidas = [r for r in renglones if r["direccion"] == "salida"]
@@ -305,23 +397,25 @@ def arduino(circuito, renglones, titulo, nucleo, constante, modo_entrada, notas)
 {texto_notas}
 """]
     for r in renglones:
-        lineas.append(f"const {tipo} PIN_{r['senal']} = {constante(r['pin'])};")
+        lineas.append(f"const {tipo} pin_{r['senal']} = {constante(r['pin'])};")
     lineas.append("\nvoid setup() {")
     for r in entradas:
-        lineas.append(f"  pinMode(PIN_{r['senal']}, {modo_entrada(r['pin'])});")
+        lineas.append(f"  pinMode(pin_{r['senal']}, {modo_entrada(r['pin'])});")
     for r in salidas:
-        lineas.append(f"  pinMode(PIN_{r['senal']}, OUTPUT);")
+        lineas.append(f"  pinMode(pin_{r['senal']}, OUTPUT);")
     lineas.append("}\n")
     lineas.append("// Combinacional: leer, evaluar y escribir, sin pausa.")
     lineas.append("void loop() {")
+    activo, inactivo = ("LOW", "HIGH") if salidas_en_bajo else ("HIGH", "LOW")
     for r in entradas:
-        lineas.append(f"  uint8_t in_{r['senal']} = digitalRead(PIN_{r['senal']}) == HIGH;")
+        lineas.append(f"  uint8_t in_{r['senal']} = digitalRead(pin_{r['senal']}) == "
+                      f"{'LOW' if entradas_en_bajo else 'HIGH'};")
     lineas.append("")
     for n in circuito.salidas:
         lineas.append(f"  uint8_t out_{n} = {ecuacion(circuito.arboles[n], 'c', 'in_')};")
     lineas.append("")
     for r in salidas:
-        lineas.append(f"  digitalWrite(PIN_{r['senal']}, out_{r['senal']} ? HIGH : LOW);")
+        lineas.append(f"  digitalWrite(pin_{r['senal']}, out_{r['senal']} ? {activo} : {inactivo});")
     lineas.append("}\n")
     return "\n".join(lineas)
 
@@ -338,14 +432,25 @@ def esp32_arduino(circuito, variante, renglones):
                "nunca se usan. Logica de 3.3 V: no metas 5 V a ninguna entrada."])
 
 
-def avr(circuito, variante, renglones):
+def avr(circuito, variante, renglones, valores=None):
+    """Sketch del Uno/Nano o del Mega, con los ajustes de entradas y salidas."""
+    valores = valores or {}
     info = placas.ARDUINO[variante]
+    en_bajo = ajustes.entradas_invertidas(valores)
+    if en_bajo:
+        notas = ["Entradas con INPUT_PULLUP: cada boton va de la pata a GND y, presionado,",
+                 "cuenta como 1. D0/D1 quedan libres para el Serial (el USB)."]
+    else:
+        notas = ["El ATmega no tiene pull-down interno: pon 10 kOhm de cada entrada",
+                 "a GND. D0/D1 quedan libres para el Serial (el USB)."]
+    if ajustes.salidas_invertidas(valores):
+        notas.append("Salidas activas en bajo: el LED va de 5 V a la pata, con su resistencia.")
     return arduino(
         circuito, renglones, info["titulo"], "Arduino AVR (arduino:avr)",
         constante=str,
-        modo_entrada=lambda pin: "INPUT",
-        notas=["El ATmega no tiene pull-down interno: pon 10 kOhm de cada entrada",
-               "a GND. D0/D1 quedan libres para el Serial (el USB)."])
+        modo_entrada=lambda pin: "INPUT_PULLUP" if en_bajo else "INPUT",
+        notas=notas, entradas_en_bajo=en_bajo,
+        salidas_en_bajo=ajustes.salidas_invertidas(valores))
 
 
 def bluepill(circuito, renglones):

@@ -177,11 +177,64 @@ familia), `PROJECT_OUTPUT_DIRECTORY output_files` en uno de un EPM240T100C5, y
   de Quartus Prime, pero ninguno de los dos programas estaba instalado para
   pasarles los archivos. Del lado de la MAX II lo que falta es solo eso: el
   VHDL ya está sintetizado y simulado después de la síntesis (arriba).
-- **Las máquinas de estado**, con el Release 3.
-- **En la GUI** es la pestaña *Kit de hardware* del panel de Resultados (y el
-  menú *Armado*): usa la tabla que está en pantalla (con varias salidas, cosa que
-  la CLI no permite), la forma de la barra y, opcional, pines fijos para la placa
-  que se elija. La pestaña *Documento* puede meter el kit completo en el HTML.
+- **Salidas Mealy en la MAX II por tabla o por estados.** `vhdl_fsm.por_tabla` y
+  `por_estados` solo escriben salidas Moore: una máquina Mealy con salidas se
+  bloquea en la MAX II salvo con el método de ecuaciones. PIC, Arduino y Python
+  sí la generan.
+- **El planificador de pines de las placas sin hoja oficial.** El orden de los
+  cabezales de la Blue Pill y la numeración 1 a 30 de la Nano no aparecen
+  escritos en una fuente oficial; están anotados en `hw/encapsulados.py`.
+
+## La ventana del kit, los ajustes y el ensamblador
+
+*Armado > Kit de hardware* abre `gui/kit_ventana.py`. Lo que se decide ahí vive
+en un `ConfigKit` (`hw/configuracion.py`): las plataformas marcadas, los pines de
+cada placa como `{señal: pata}`, los ajustes y los archivos corregidos a mano. Lo
+leen tres lugares, así que siempre dicen lo mismo: la ventana, *Escribir kit* /
+*Generar todo* (`hw/kit.py`) y el documento (`render/report.py`, `seccion_kit`),
+que imprime el dibujo del componente con sus patas asignadas, las tablas de pines
+y de ajustes, y cada archivo con los editados marcados.
+
+- **Pines.** `hw/encapsulados.py` tiene el dibujo de cada placa con la fuente de
+  cada pinout (figuras PDIP de Microchip, tabla PT-EPM240-1.4 de Intel, pinouts
+  oficiales de Arduino, Espressif y Raspberry Pi). Una prueba amarra los dos
+  catálogos: toda pata utilizable de `hw/placas.py` existe y es asignable en el
+  dibujo, y ninguna de alimentación, JTAG, flash o USB lo es. Las señales que no
+  se asignan toman la siguiente pata libre (`kit.pines_en_orden`).
+- **Ajustes.** `hw/ajustes.py` declara solo los que el generador respeta:
+  oscilador interno de los 18F (bits IRCF de OSCCON), MCLR como entrada RE3,
+  entradas activas en bajo (en PORTB con las pull-up internas: `WPUB` y `nRBPU`
+  en el K50, `RBPU` en el 4550), salidas activas en bajo, `INPUT_PULLUP` en
+  Arduino. En la MAX II la inversión vive en una envoltura aparte
+  (`<circuito>_max2.vhd`): el circuito y su banco de prueba quedan iguales a la
+  tabla.
+- **Ensamblador (`hw/asm.py`).** El archivo es `.S` con S mayúscula: así pic-as
+  lo pasa por el preprocesador y `#include <xc.inc>` funciona. Las `CONFIG` van
+  *antes* del include, porque `xc.inc` define `BOR` (un bit de RCON) y choca con
+  el ajuste `BOR = ON` del 4550. Las palabras de protección (CP, WRT, EBTR) se
+  escriben en `OFF`: pic-as avisa por cada una que falte. NAND y XOR se escriben
+  como su SOP, y NOR como su POS: en ensamblador no hay compuertas que imitar.
+
+| qué | con qué | resultado |
+|---|---|---|
+| 192 archivos de PIC: 8 circuitos de ejemplo (de 2 a 6 entradas) × forma auto, POS y XOR × 18F45K50 y 18F4550 × sin ajustes o con todo invertido (entradas y salidas en bajo, 8 MHz, MCLR como entrada), cada uno en C y en ensamblador | XC8 v3.10 `-O1` y pic-as v3.10, con los DFP de MPLAB X 6.25 | 192 sin errores ni advertencias. |
+
+## Reloj y frecuencia
+
+`hw/reloj.py` hace las cuentas de la práctica de multivibradores: la cuenta de
+medio periodo de un divisor (`N = f_entrada / (2 f_salida)`), los bits del
+contador y el error; el 555 astable con valores E24; y el mismo cálculo escrito
+como código: divisor en VHDL, retardo en C para XC8 (`__delay_ms` o Timer0), en
+ensamblador (lazos anidados con la cuenta exacta de ciclos, o Timer0) y en
+Arduino (`delay()` o `millis()`). Lo usan la calculadora (*Herramientas*), el kit
+de las máquinas de estado y `ktool reloj`.
+
+| qué | con qué | resultado |
+|---|---|---|
+| Divisores de 1 kHz a 10 Hz, 3 Hz, 500 Hz y 1/3 Hz, y una entidad con varias salidas | GHDL 6.0, VHDL-93 y 2008 con `-Wall`, midiendo 5 periodos | Periodos exactos; sin advertencias; `--synth` sintetiza. |
+| Retardos en C (delay y Timer0) de 31 kHz a 16 MHz | XC8 v3.10 `-O1 -Wall` | 12 compilan sin advertencias. |
+| Subrutinas en ensamblador | pic-as y el cronómetro del simulador de MPLAB (mdb) | Lazos: ciclos exactos en los 6 casos. Timer0: 18 y 25 ciclos de más por la recarga. |
+| Retardos de Arduino | `arduino-cli`, `arduino:avr:uno`, `--warnings all` | 8 compilan sin advertencias. |
 
 ## Cómo se agrega una placa
 

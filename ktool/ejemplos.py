@@ -12,6 +12,8 @@ Convertidores de codigo (catodo comun: 1 = segmento encendido).
 
 from __future__ import annotations
 
+from . import segmentos
+
 X = "x"   # no importa
 
 # BCD -> segmentos a..g, catodo comun (tabla de la practica de Convertidores)
@@ -25,6 +27,10 @@ SEGMENTOS = ["a", "b", "c", "d", "e", "f", "g"]
 # Las entradas de los displays NO pueden ser D C B A: VHDL no distingue
 # mayusculas, y la entrada A chocaria con el segmento a.
 BCD = ["B3", "B2", "B1", "B0"]
+# Las cantidades A de varios bits de las practicas se llaman A_2 A_1 A_0 y no
+# A2 A1 A0: el sketch de Arduino nombra cada pin PIN_<senal>, y el nucleo de
+# Arduino ya define PIN_A0 a PIN_A7 (los pines analogicos). B_2 B_1 B_0 van
+# igual para que las dos cantidades se lean parejas.
 
 
 def _proyecto(titulo, descripcion, entradas, salidas, funcion):
@@ -144,6 +150,69 @@ def hexadecimal_a_7_segmentos_anodo():
         BCD, SEGMENTOS, f)
 
 
+# Los de 14 y 16 segmentos, el alfabeto, el mensaje y la barra salen de las
+# tipografias de ktool/segmentos.py (los nombres de cada segmento estan
+# dibujados al principio de ese archivo).
+
+def bcd_a_14_segmentos():
+    def f(b):
+        n = _numero(b, BCD)
+        if n > 9:
+            return {s: X for s in segmentos.TIPOS["14seg"]}
+        return segmentos.segmentos(str(n), "14seg")
+    return _proyecto(
+        "BCD a 14 segmentos (catodo comun)",
+        "Cada salida es un segmento del display alfanumerico: 1 = encendido. "
+        "De 10 a 15 no importa.",
+        BCD, segmentos.TIPOS["14seg"], f)
+
+
+def bcd_a_16_segmentos():
+    def f(b):
+        n = _numero(b, BCD)
+        if n > 9:
+            return {s: X for s in segmentos.TIPOS["16seg"]}
+        return segmentos.segmentos(str(n), "16seg")
+    return _proyecto(
+        "BCD a 16 segmentos (catodo comun)",
+        "Cada salida es un segmento; a1 y a2 son las mitades de arriba, d1 y d2 las de "
+        "abajo. 1 = encendido. De 10 a 15 no importa.",
+        BCD, segmentos.TIPOS["16seg"], f)
+
+
+def _letras(tipo):
+    """Las letras A-Z que tienen forma en ese display, en orden."""
+    return "".join(c for c in segmentos.soportados(tipo) if c.isalpha())
+
+
+def alfabeto_7_segmentos():
+    letras = _letras("7seg")
+    return segmentos.proyecto_mensaje(
+        letras, "7seg", titulo=f"Alfabeto en 7 segmentos ({len(letras)} letras)")
+
+
+def alfabeto_14_segmentos():
+    return segmentos.proyecto_mensaje(_letras("14seg"), "14seg",
+                                      titulo="Alfabeto en 14 segmentos")
+
+
+def alfabeto_16_segmentos():
+    return segmentos.proyecto_mensaje(_letras("16seg"), "16seg",
+                                      titulo="Alfabeto en 16 segmentos")
+
+
+def mensaje_hola_16_segmentos():
+    return segmentos.proyecto_mensaje("HOLA", "16seg")
+
+
+def barra_10_leds_nivel():
+    return segmentos.proyecto_barra(10, "nivel")
+
+
+def barra_10_leds_punto():
+    return segmentos.proyecto_barra(10, "punto")
+
+
 # ---------------------------------------------------------------- aritmeticos
 
 def semisumador():
@@ -258,10 +327,11 @@ def primos_4_bits():
 
 
 def primos_5_bits():
-    nombres = ["A4", "A3", "A2", "A1", "A0"]
+    nombres = ["A_4", "A_3", "A_2", "A_1", "A_0"]
     return _proyecto(
         "Primos de 5 bits",
-        "La lampara L se enciende con cada numero primo de 0 a 31 (Practica 2).",
+        "La lampara L se enciende con cada numero primo de 0 a 31 (Practica 2). "
+        "A_4 es el bit mas significativo (A4 en el enunciado).",
         nombres, ["L"], lambda b: {"L": int(_es_primo(_numero(b, nombres)))})
 
 
@@ -305,6 +375,128 @@ def alarma_de_coche():
         "(ejemplo de la Guia MAX II). Abierto = 0, cerrado = 1.",
         ["PI", "PD", "SW", "CINT"], ["AL"],   # CINT = cinturon (CIN se lee como acarreo)
         lambda b: {"AL": int((not b["PI"]) or (not b["PD"]) or (b["SW"] and not b["CINT"]))})
+
+
+def compuertas_basicas():
+    # Una salida por circuito integrado de la practica de Compuertas logicas;
+    # se llaman Y_ porque AND, OR, NOT... son palabras reservadas de VHDL.
+    def f(b):
+        a, c = b["A"], b["B"]
+        return {"Y_NAND": 1 - (a & c),     # 74LS00
+                "Y_NOR": 1 - (a | c),      # 74LS02
+                "Y_NOT": 1 - a,            # 74LS04 (solo usa A)
+                "Y_AND": a & c,            # 74LS08
+                "Y_OR": a | c,             # 74LS32
+                "Y_XOR": a ^ c}            # 74LS86
+    return _proyecto(
+        "Compuertas basicas",
+        "Las seis compuertas de la practica (74LS00, 02, 04, 08, 32 y 86) con las "
+        "mismas dos entradas: un LED por compuerta.",
+        ["A", "B"], ["Y_NAND", "Y_NOR", "Y_NOT", "Y_AND", "Y_OR", "Y_XOR"], f)
+
+
+def alarma_refrigerador():
+    # Tabla 2.3 de Diseno de circuitos combinatorios, tal como viene impresa:
+    # F = 1 en las combinaciones C B A = 010, 011 y 111.
+    def f(b):
+        puerta_abierta = b["B"]
+        return {"F": int(puerta_abierta and (b["A"] or not b["C"]))}
+    return _proyecto(
+        "Alarma del refrigerador (tabla 2.3)",
+        "La tabla 2.3 de la practica: C = horario, B = puerta, A = dia. F = 1 en "
+        "C B A = 010, 011 y 111 (F = B A + C' B).",
+        ["C", "B", "A"], ["F"], f)
+
+
+def sumador_3_bits():
+    def f(b):
+        total = _numero(b, ["A_2", "A_1", "A_0"]) + _numero(b, ["B_2", "B_1", "B_0"])
+        return _a_bits(total, ["CS", "S2", "S1", "S0"])
+    return _proyecto(
+        "Sumador binario de 3 bits",
+        "A_2A_1A_0 + B_2B_1B_0 = CS S2 S1 S0 (CS es el acarreo final).",
+        ["A_2", "A_1", "A_0", "B_2", "B_1", "B_0"], ["CS", "S2", "S1", "S0"], f)
+
+
+def restador_3_bits_comparador():
+    def f(b):
+        a, c = _numero(b, ["A_2", "A_1", "A_0"]), _numero(b, ["B_2", "B_1", "B_0"])
+        resta = _a_bits((a - c) & 0b111, ["D2", "D1", "D0"])   # complemento a 2
+        resta["PS"] = int(a < c)                               # prestamo final
+        resta.update({"MENOR": int(a < c), "IGUAL": int(a == c), "MAYOR": int(a > c)})
+        return resta
+    return _proyecto(
+        "Restador de 3 bits con comparador",
+        "A - B = PS D2 D1 D0 (PS = 1 si la resta es negativa) y el comparador que sale "
+        "de la resta: MENOR, IGUAL o MAYOR.",
+        ["A_2", "A_1", "A_0", "B_2", "B_1", "B_0"],
+        ["PS", "D2", "D1", "D0", "MENOR", "IGUAL", "MAYOR"], f)
+
+
+def restador_3_bits_7_segmentos():
+    def f(b):
+        resta = _numero(b, ["A_2", "A_1", "A_0"]) - _numero(b, ["B_2", "B_1", "B_0"])
+        # el display no muestra negativos: se muestra la magnitud (el complemento
+        # a 2 del resultado cuando el prestamo es 1) y el signo va aparte
+        salida = dict(zip(SEGMENTOS, (int(c) for c in SIETE_SEG[abs(resta)])))
+        salida["SIGNO"] = int(resta < 0)
+        return salida
+    return _proyecto(
+        "Restador de 3 bits decodificado a 7 segmentos",
+        "A_2A_1A_0 - B_2B_1B_0 en un display de catodo comun: muestra la magnitud (0 a 7) y "
+        "SIGNO = 1 cuando el resultado es negativo (un LED o el segmento g de otro display).",
+        ["A_2", "A_1", "A_0", "B_2", "B_1", "B_0"], SEGMENTOS + ["SIGNO"], f)
+
+
+def binario_a_octal_7_segmentos():
+    def f(b):
+        return dict(zip(SEGMENTOS, (int(c) for c in SIETE_SEG[_numero(b, ["B2", "B1", "B0"])])))
+    return _proyecto(
+        "Binario a octal en 7 segmentos",
+        "Un numero de 3 bits (0 a 7) en un display de catodo comun: 1 = segmento encendido.",
+        ["B2", "B1", "B0"], SEGMENTOS, f)
+
+
+def nombre_16_segmentos():
+    # El texto es de ejemplo: cada quien escribe el suyo en Herramientas >
+    # Texto a segmentos.
+    return segmentos.proyecto_mensaje(
+        "NOMBRE", "16seg", titulo="Nombre en 16 segmentos (texto de ejemplo)")
+
+
+def alu_2_bits():
+    def f(b):
+        a, c = _numero(b, ["A_1", "A_0"]), _numero(b, ["B_1", "B_0"])
+        operacion = _numero(b, ["SB", "SC"])
+        # salidas aritmeticas: Sb Sc = 00 suma, 01 resta, 10 comparador, 11 apagadas
+        if operacion == 0:                  # Cs S1 S0
+            aritmetica = a + c
+        elif operacion == 1:                # Ps D1 D0: la resta en complemento a 2
+            aritmetica = (a - c) & 0b111
+        elif operacion == 2:                # menor, igual, mayor
+            aritmetica = 4 * (a < c) + 2 * (a == c) + (a > c)
+        else:
+            aritmetica = 0
+        # salidas logicas, bit a bit: 00 AND, 01 OR, 10 XOR, 11 NOT A
+        logica = [a & c, a | c, a ^ c, ~a & 0b11][operacion]
+        salida = _a_bits(aritmetica, ["ZA", "ZB", "ZC"])
+        salida.update(_a_bits(logica, ["ZD", "ZE"]))
+        return salida
+    return _proyecto(
+        "ALU de 2 bits",
+        "SB SC escogen la operacion. ZA ZB ZC: suma (Cs S1 S0), resta (Ps D1 D0), "
+        "comparador (menor, igual, mayor) o apagadas. ZD ZE: AND, OR, XOR o NOT A, bit a "
+        "bit. Sa no entra: en la tabla de la practica las salidas que no escoge Sa no "
+        "importan, asi que ninguna salida depende de Sa.",
+        ["SB", "SC", "A_1", "A_0", "B_1", "B_0"], ["ZA", "ZB", "ZC", "ZD", "ZE"], f)
+
+
+def xor_de_tres_entradas():
+    return _proyecto(
+        "XOR de tres entradas",
+        "F = A xor B xor C: el Ejemplo 1 de Dispositivos logicos programables y VHDL.",
+        ["A", "B", "C"], ["F"],
+        lambda b: {"F": b["A"] ^ b["B"] ^ b["C"]})
 
 
 # -------------------------------------------- secuenciales (Circuitos Secuenciales)
@@ -372,6 +564,14 @@ CATALOGO = [
     ("Displays", [
         ("BCD a 7 segmentos (catodo comun)", bcd_a_7_segmentos),
         ("Hexadecimal a 7 segmentos (anodo comun)", hexadecimal_a_7_segmentos_anodo),
+        ("BCD a 14 segmentos", bcd_a_14_segmentos),
+        ("BCD a 16 segmentos", bcd_a_16_segmentos),
+        ("Alfabeto en 7 segmentos", alfabeto_7_segmentos),
+        ("Alfabeto en 14 segmentos", alfabeto_14_segmentos),
+        ("Alfabeto en 16 segmentos", alfabeto_16_segmentos),
+        ("Mensaje HOLA en 16 segmentos", mensaje_hola_16_segmentos),
+        ("Barra de 10 LEDs (nivel)", barra_10_leds_nivel),
+        ("Barra de 10 LEDs (punto)", barra_10_leds_punto),
     ]),
     ("Aritmeticos", [
         ("Semisumador", semisumador),
@@ -395,6 +595,15 @@ CATALOGO = [
         ("Mezcladora de 4 sustancias", mezcladora),
         ("Juego de adivinar", juego_de_adivinar),
         ("Alarma de coche", alarma_de_coche),
+        ("Compuertas basicas", compuertas_basicas),
+        ("Alarma del refrigerador (tabla 2.3)", alarma_refrigerador),
+        ("Sumador de 3 bits", sumador_3_bits),
+        ("Restador de 3 bits con comparador", restador_3_bits_comparador),
+        ("Restador de 3 bits a 7 segmentos", restador_3_bits_7_segmentos),
+        ("Binario a octal en 7 segmentos", binario_a_octal_7_segmentos),
+        ("Nombre en 16 segmentos", nombre_16_segmentos),
+        ("ALU de 2 bits", alu_2_bits),
+        ("XOR de tres entradas", xor_de_tres_entradas),
     ]),
     ("Contadores (maquinas de estado)", [
         ("Mod-13 descendente", mod13_descendente),
