@@ -250,7 +250,9 @@ class Pines(unittest.TestCase):
         self.assertEqual(usadas | no_io, set(range(1, 101)))
 
     def test_nombres_que_no_compilan(self):
-        for malo in ("or", "SIGNAL", "2Y", "Y__1"):
+        # 'I' chocaria con el contador del banco de prueba VHDL (no distingue
+        # mayusculas); 'label' y 'next' son reservadas de VHDL; 'posedge' de Verilog
+        for malo in ("or", "SIGNAL", "2Y", "Y__1", "I", "label", "Next", "posedge", "Circuito"):
             with self.assertRaises(ValueError):
                 Circuito(TruthTable(2, outputs={malo: [0, 1, 1, 0]}))
         with self.assertRaises(ValueError):   # VHDL no distingue a de A

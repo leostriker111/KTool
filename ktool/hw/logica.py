@@ -198,6 +198,19 @@ endmodule
 
 # ================================================================ MAX II
 
+def celdas_max_ii(circuito):
+    """Cota de celdas logicas (LE) que pide el circuito en la MAX II.
+
+    Cada LE de la MAX II es una tabla de 4 entradas. Una funcion de hasta 4
+    entradas cabe en 1; de 5, en 3 (dos tablas y la que escoge); de 6, en 5
+    (cuatro tablas de 4 y dos niveles para escoger, que caben en una). Es una
+    cota por arriba: Quartus suele usar menos.
+    """
+    por_salida = {2: 1, 3: 1, 4: 1, 5: 3, 6: 5}[circuito.n_entradas]
+    constantes = sum(1 for s in circuito.salidas if circuito.elegidas[s].const is not None)
+    return por_salida * (circuito.n_salidas - constantes)
+
+
 def qsf(circuito, renglones):
     """Restricciones de Quartus Prime para la MAX II EPM240T100C5."""
     lineas = [f"""\
@@ -208,6 +221,12 @@ def qsf(circuito, renglones):
 #
 # Mapeo de pines:
 {tabla_de_pines(renglones, '#', lambda p: f'PIN_{p}')}
+#
+# Las patas son de 3.3 V y NO aguantan 5 V directo: los interruptores de las
+# entradas van a 3.3 V. Si la senal viene de un chip TTL de 5 V, baja el nivel
+# antes (un divisor de 1 kOhm y 2 kOhm, o un 74LVC245).
+#
+# Tamano: a lo mas {celdas_max_ii(circuito)} de las 240 celdas logicas.
 
 set_global_assignment -name FAMILY "MAX II"
 set_global_assignment -name DEVICE EPM240T100C5
@@ -215,6 +234,16 @@ set_global_assignment -name TOP_LEVEL_ENTITY {circuito.nombre}
 set_global_assignment -name VHDL_FILE {circuito.nombre}.vhd
 # Para usar la version en Verilog, cambia la linea de arriba por:
 # set_global_assignment -name VERILOG_FILE {circuito.nombre}.v
+
+# El VHDL generado se valido en VHDL-1993 estricto (y en 2008).
+set_global_assignment -name VHDL_INPUT_VERSION VHDL_1993
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+
+# Las patas que el diseno no usa quedan como entradas en alta impedancia. Por
+# omision Quartus las deja como salidas a tierra ("As output driving ground"),
+# y en las placas de practica de la EPM240 hay LEDs y botones en patas sueltas:
+# un boton a VCC contra una pata en tierra es un corto.
+set_global_assignment -name RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"
 """]
     for r in renglones:
         lineas.append(f"set_location_assignment PIN_{r['pin']} -to {r['senal']}")

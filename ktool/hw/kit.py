@@ -123,6 +123,12 @@ def generar(tabla, carpeta, forma="auto"):
           f"fpga/tb_{n}.vhd", f"fpga/tb_{n}.v")
     try:
         renglones = asignar_pines(circuito, placas.EPM240)
+        # Con los topes de ktool (6 entradas, 32 salidas) son a lo mas 160 de
+        # 240 celdas: hoy nunca se bloquea por tamano. Se revisa igual, por si
+        # algun dia suben los topes.
+        if logica.celdas_max_ii(circuito) > 240:
+            raise Bloqueo(f"pide hasta {logica.celdas_max_ii(circuito)} celdas logicas y "
+                          "la EPM240 tiene 240")
         archivos[f"fpga/{n}.qsf"] = logica.qsf(circuito, renglones)
         archivos[f"fpga/{n}.qpf"] = logica.qpf(circuito)
         listo(placas.EPM240["titulo"], f"fpga/{n}.qpf", f"fpga/{n}.qsf")

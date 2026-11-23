@@ -114,7 +114,8 @@ paridades de 6 variables en NAND. Cada archivo pasó por la herramienta real:
 | 88 archivos `.c` de PIC (los 5 chips) | MPLAB XC8 v3.10, `-O1`, con los DFP de MPLAB X 6.25 | 88 compilan, sin una advertencia. Los que no caben ya venían bloqueados. |
 | 21 sketches de Uno o Mega | `arduino-cli` 1.6 con `arduino:avr` 1.8.8, `--warnings all` | 21 compilan, sin advertencias en el código generado. |
 | sketches de ESP32 (WROOM-32, S3, C3) y Blue Pill | `arduino-cli` con `esp32:esp32` 4.0.0 y `STMicroelectronics:stm32` 3.1.0 | 31 compilan (8 circuitos variados en las 4 placas; el C3 bloqueado en el de 16 pines), sin advertencias en el código generado. |
-| 21 bancos de prueba VHDL | GHDL 6.0.0 | 21 recorren todas las combinaciones y coinciden con la tabla. |
+| 21 bancos de prueba VHDL | GHDL 6.0.0, en VHDL-93 **y** VHDL-2008 estrictos, con `-Wall` | 21 recorren todas las combinaciones y coinciden con la tabla, sin una advertencia. |
+| 21 síntesis del VHDL | GHDL 6.0.0 `--synth` | 21 sintetizan a compuertas, y **el mismo banco corrido contra el netlist sintetizado** coincide en todas las combinaciones (simulación post-síntesis). |
 | 21 bancos de prueba Verilog | Icarus Verilog 12.0 (`-Wall`) | 21 coinciden, sin advertencias. |
 | 21 `simular.py` | Python 3.12 | 21 coinciden con la tabla. |
 
@@ -132,13 +133,43 @@ Para saber que esas pruebas sí atrapan errores, se metieron dos a propósito (e
 NOT de Python escrito con `not` y una máscara de PIC volteada) y las dos
 truenan la prueba.
 
+## La MAX II en particular
+
+El VHDL es lo que Quartus compila para la EPM240, así que tiene su propia pasada:
+
+- **VHDL-1993 estricto.** Es la versión que Quartus usa por omisión, y el `.qsf`
+  la fija con `VHDL_INPUT_VERSION VHDL_1993`. El código también pasa en VHDL-2008.
+- **Sintetizable, y la síntesis no cambia la función.** GHDL lo baja a compuertas
+  y el banco de prueba se corre otra vez *contra ese netlist*: si la síntesis
+  interpretara algo distinto, ahí saldría.
+- **Siempre cabe.** Cada celda lógica (LE) de la MAX II es una tabla de 4
+  entradas: una función de 6 entradas pide a lo más 5. Con los topes de ktool
+  (6 entradas, 32 salidas) son 160 de 240 celdas; `logica.celdas_max_ii` lo
+  calcula y el kit lo revisa de todos modos, por si un día suben los topes.
+- **Las patas sin usar quedan como entradas.** Quartus, si no se le dice nada,
+  las deja como salidas a tierra; en las placas de práctica de la EPM240 hay
+  LEDs y botones en patas sueltas, y un botón a VCC contra una pata en tierra es
+  un corto. El `.qsf` pone `RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"`.
+- **3.3 V.** Las patas de la MAX II no aguantan 5 V directo; el `.qsf` lo
+  advierte y dice cómo bajar el nivel si la señal viene de un chip TTL.
+
+Las asignaciones del `.qsf` no se pudieron leer del manual de Intel (sus páginas
+redirigen a un 404), así que se confirmaron contra archivos que escribió el
+propio Quartus: `RESERVE_ALL_UNUSED_PINS` en el `.qsf` de una MAX II guardado por
+Quartus Prime 20.1.1 Lite (también confirma que esa versión todavía soporta la
+familia), `PROJECT_OUTPUT_DIRECTORY output_files` en uno de un EPM240T100C5, y
+`VHDL_INPUT_VERSION VHDL_1993` junto con el valor por omisión
+`RESERVE_ALL_UNUSED_PINS "As output driving ground"` en un
+`assignment_defaults.qdf` generado por Quartus.
+
 ## Qué falta
 
 - **Grabarlos.** Nada de esto se ha cargado en una placa de verdad todavía. Las
   matemáticas están comprobadas; el armado no.
 - **WinCUPL y Quartus.** El `.pld` sigue la sintaxis de WinCUPL y el `.qsf` la
   de Quartus Prime, pero ninguno de los dos programas estaba instalado para
-  pasarles los archivos.
+  pasarles los archivos. Del lado de la MAX II lo que falta es solo eso: el
+  VHDL ya está sintetizado y simulado después de la síntesis (arriba).
 - **Las máquinas de estado**, con el Release 3.
 - **La GUI** no tiene todavía el botón; por ahora es `--hw` en la CLI.
 

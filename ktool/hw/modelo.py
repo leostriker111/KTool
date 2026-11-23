@@ -22,15 +22,44 @@ FORMAS = ("sop", "pos", "nand", "nor")
 # generan (C, C++, Python, VHDL, Verilog, CUPL). Se comparan en minusculas
 # porque VHDL y CUPL no distinguen mayusculas.
 RESERVADAS = {
-    # VHDL
-    "abs", "and", "begin", "bit", "case", "else", "end", "entity", "for", "if",
-    "in", "inout", "is", "loop", "mod", "nand", "nor", "not", "of", "or", "out",
-    "port", "process", "rem", "signal", "then", "to", "type", "wait", "when",
-    "while", "with", "xnor", "xor", "architecture", "library", "use", "all",
-    "others", "range", "downto", "buffer", "map", "open", "null", "on",
-    # Verilog
-    "assign", "module", "endmodule", "input", "output", "wire", "reg", "always",
-    "initial", "integer",
+    # VHDL-93 completo (IEEE 1076-1993, seccion 13.9) y lo que agrega VHDL-2008
+    "abs", "access", "after", "alias", "all", "and", "architecture", "array",
+    "assert", "attribute", "begin", "block", "body", "buffer", "bus", "case",
+    "component", "configuration", "constant", "disconnect", "downto", "else",
+    "elsif", "end", "entity", "exit", "file", "for", "function", "generate",
+    "generic", "group", "guarded", "if", "impure", "in", "inertial", "inout",
+    "is", "label", "library", "linkage", "literal", "loop", "map", "mod",
+    "nand", "new", "next", "nor", "not", "null", "of", "on", "open", "or",
+    "others", "out", "package", "port", "postponed", "procedure", "process",
+    "pure", "range", "record", "register", "reject", "rem", "report", "return",
+    "rol", "ror", "select", "severity", "shared", "signal", "sla", "sll", "sra",
+    "srl", "subtype", "then", "to", "transport", "type", "unaffected", "units",
+    "until", "use", "variable", "wait", "when", "while", "with", "xnor", "xor",
+    "assume", "context", "cover", "default", "fairness", "force", "parameter",
+    "property", "protected", "release", "restrict", "sequence", "strong",
+    "vmode", "vprop", "vunit",
+    # tipos y funciones de IEEE que el banco de prueba usa por nombre
+    "bit", "boolean", "integer", "natural", "string", "std_logic", "unsigned",
+    "to_unsigned", "now",
+    # Verilog-2001 (IEEE 1364-2001, anexo B)
+    "always", "assign", "automatic", "buf", "bufif0", "bufif1", "casex", "casez",
+    "cell", "cmos", "config", "deassign", "defparam", "design", "disable", "edge",
+    "endcase", "endconfig", "endfunction", "endgenerate", "endmodule",
+    "endprimitive", "endspecify", "endtable", "endtask", "event", "forever",
+    "fork", "genvar", "highz0", "highz1", "ifnone", "incdir", "include",
+    "initial", "input", "instance", "join", "large", "liblist", "localparam",
+    "macromodule", "medium", "module", "negedge", "nmos", "noshowcancelled",
+    "notif0", "notif1", "output", "pmos", "posedge", "primitive", "pull0",
+    "pull1", "pulldown", "pullup", "rcmos", "real", "realtime", "reg",
+    "release", "repeat", "rnmos", "rpmos", "rtran", "rtranif0", "rtranif1",
+    "scalared", "showcancelled", "signed", "small", "specify", "specparam",
+    "strong0", "strong1", "supply0", "supply1", "task", "time", "tran",
+    "tranif0", "tranif1", "tri", "tri0", "tri1", "triand", "trior", "trireg",
+    "vectored", "wand", "weak0", "weak1", "wire", "wor",
+    # los nombres que usan los archivos generados: una senal que se llamara
+    # igual chocaria (en VHDL, sin importar mayusculas)
+    "circuito", "tb_circuito", "combinacional", "prueba", "dut", "i", "fila",
+    "errores", "x", "m",
     # C / C++ / Python
     "int", "char", "void", "return", "do", "def", "class", "true", "false",
     "none", "pass", "import", "from", "as", "elif", "try", "lambda", "global",
