@@ -164,21 +164,26 @@ ktool gui
 ```
 
 A table in the style of the classic solvers. Along the top you pick the number of
-variables and outputs, turn on the notes column, and choose the form (auto, SOP,
+inputs and outputs, turn on the notes column, and choose the form (auto, SOP,
 POS, NAND only, NOR only, or both). The expression bar fills a whole column by
 evaluating whatever you type.
 
 Everything that comes out of the table lives in the **Resultados** panel at the
-bottom, in four tabs that read the same table and the same form:
+bottom, in five tabs that read the same table and the same form:
 
 | tab | what it does |
 |---|---|
 | *Ecuaciones* | Every form with its cost, and the cheapest. Refreshes itself when you come back to it. |
-| *Documento* | The HTML, with a tick box per section. All of them are ticked to begin with, the breadboard build and the hardware kit included. |
+| *Portada* | Title, author, organisation, course, teacher, group, date, reviewed by and approved by. They become a formal cover page with signature lines; empty fields are left out. |
+| *Generar* | A **Contains** list to tick (cover, table, maps, circuits, languages, build, kit) plus what else goes in the folder (the build on its own, the kit folder, the project). One click on *Generar todo* writes it all. |
 | *Protoboard* | The physical build: which chips (faithful to the diagram, only the ones you own, or automatic), what goes on the outputs (LEDs, 7- or 16-segment displays), one board per output or one for all. |
 | *Kit de hardware* | Writes the [hardware kit](#hardware-kit) folder. If your board has LEDs on fixed pins, pick the board and type its pins; each board remembers its own. |
 
 The *Armado* menu jumps straight to *Protoboard* and *Kit de hardware*.
+
+**Projects and examples.** *Archivo* saves and opens the whole thing (table, names, cover, every tab's options) as a `.ktool.json`. A copy is saved every few seconds, and anything discarded unsaved goes to a recycle bin you can restore from. *Archivo > Ejemplos* has 24 ready circuits: multiplexer, demultiplexer, decoders, priority encoder, BCD and hex to 7 segments, adders, subtractors, comparator, Gray, two's complement, excess-3, and the exercises from the course labs.
+
+**Named inputs.** Click an input header to rename it (`SEL`, `D0`, `EN`): the name reaches equations, maps, document, build and code. Products with long names are written apart (`SEL' D0`), and a name that wouldn't compile in VHDL, Verilog or C is refused on the spot.
 
 Filling a table in fast is the part that was actually designed:
 
@@ -188,9 +193,9 @@ Filling a table in fast is the part that was actually designed:
 | Set the whole selection | <kbd>1</kbd>, <kbd>0</kbd> or <kbd>x</kbd> changes every selected cell at once. |
 | Cycle one cell | Double-click: `0 → 1 → x`. |
 | Copy in and out | <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd>/<kbd>X</kbd>, in a format Excel understands. |
-| Rename an output | Click its column header. |
+| Rename an input or output | Click its column header. |
 
-The *Ayuda* menu has the quick guide, the shortcut list, and a link back here.
+The *Ayuda* menu has the quick guide, a guide per topic, the shortcut list, the version (*Acerca de*) and a link back here.
 
 ## What comes out
 

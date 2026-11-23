@@ -167,21 +167,26 @@ ktool gui
 ```
 
 Una tabla al estilo de los solucionadores clásicos. Arriba eliges el número de
-variables y de salidas, activas la columna de notas, y escoges la forma (auto,
+entradas y de salidas, activas la columna de notas, y escoges la forma (auto,
 SOP, POS, solo NAND, solo NOR o ambas). La barra de expresión llena una columna
 entera evaluando lo que escribas.
 
-Todo lo que sale de la tabla vive en el panel **Resultados** de abajo, en cuatro
+Todo lo que sale de la tabla vive en el panel **Resultados** de abajo, en cinco
 pestañas que leen la misma tabla y la misma forma:
 
 | pestaña | qué hace |
 |---|---|
 | *Ecuaciones* | Todas las formas con su costo, y la más barata. Se actualiza sola al volver a ella. |
-| *Documento* | El HTML, con una casilla por sección. De entrada van todas marcadas, incluidos el armado en protoboard y el kit de hardware. |
+| *Portada* | Título, autor, organización, materia, profesor, secuencia, fecha, revisó y autorizó. Sale como portada formal con líneas de firma; lo vacío no aparece. |
+| *Generar* | Una lista **Contiene** palomeable (portada, tabla, mapas, circuitos, lenguajes, armado, kit) y lo que además se guarda en la carpeta (el armado aparte, la carpeta del kit, el proyecto). Un clic en *Generar todo* lo escribe todo. |
 | *Protoboard* | El armado físico: qué chips (fiel al diagrama, solo los que tienes, o automático), qué va en las salidas (LEDs, displays de 7 o 16 segmentos), una protoboard por salida o una para todo. |
 | *Kit de hardware* | Escribe la carpeta del [kit de hardware](#kit-de-hardware). Si tu placa trae LEDs en pines fijos, eliges la placa y escribes sus pines; cada placa recuerda los suyos. |
 
 El menú *Armado* lleva directo a *Protoboard* y a *Kit de hardware*.
+
+**Proyectos y ejemplos.** *Archivo* guarda y abre todo (tabla, nombres, portada y las opciones de cada pestaña) como `.ktool.json`. Cada pocos segundos se guarda una copia, y lo que descartas sin guardar va a una papelera de la que se recupera. *Archivo > Ejemplos* trae 24 circuitos listos: multiplexor, demultiplexor, decodificadores, codificador de prioridad, BCD y hexadecimal a 7 segmentos, sumadores, restadores, comparador, Gray, complemento a 2, exceso-3 y los ejercicios de las prácticas.
+
+**Entradas con nombre.** Clic en el encabezado de una entrada para renombrarla (`SEL`, `D0`, `EN`): el nombre llega a ecuaciones, mapas, documento, armado y código. Con nombres largos los productos se escriben separados (`SEL' D0`), y un nombre que no compilaría en VHDL, Verilog o C se rechaza en el momento.
 
 Llenar la tabla rápido es la parte que de verdad se diseñó:
 
@@ -191,10 +196,9 @@ Llenar la tabla rápido es la parte que de verdad se diseñó:
 | Poner toda la selección | <kbd>1</kbd>, <kbd>0</kbd> o <kbd>x</kbd> cambia todas las celdas elegidas de un golpe. |
 | Ciclar una celda | Doble clic: `0 → 1 → x`. |
 | Copiar y pegar | <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd>/<kbd>X</kbd>, en formato que Excel entiende. |
-| Renombrar una salida | Clic en su encabezado. |
+| Renombrar una entrada o salida | Clic en su encabezado. |
 
-El menú *Ayuda* trae la guía rápida, la lista de atajos y el enlace al
-repositorio.
+El menú *Ayuda* trae la guía rápida, una guía por tema, la lista de atajos, la versión (*Acerca de*) y el enlace al repositorio.
 
 ## Qué sale
 
