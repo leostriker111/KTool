@@ -138,7 +138,7 @@ def _pasos_pic(circuito, salida):
     Por que no la ecuacion tal cual (como en Arduino): XC8 gratuito traduce
     cada `&` y cada `!` a varias instrucciones, y un circuito de 6 entradas y 7
     salidas ya no cabe en las 1024 palabras del 16F84A. Un termino como A'BC
-    solo pregunta "A, B y C valen 0, 1 y 1": `(x & 0b111000) == 0b011000`,
+    solo pregunta "A, B y C valen 0, 1 y 1": `(fila__ & 0b111000) == 0b011000`,
     unas cinco instrucciones sin importar cuantas letras tenga.
 
       SOP y solo NAND  la salida vale 1 si coincide alguno de sus terminos
@@ -161,7 +161,7 @@ def _pasos_pic(circuito, salida):
         mascara = sum(bit(v) for v in sol.xor_vars)
         return [f"// {salida} = {sol.equation}: paridad de los bits de la mascara",
                 f"uint8_t {destino} = {1 if sol.xnor else 0};",
-                f"for (uint8_t m = (uint8_t)(x & 0x{mascara:02X}); m != 0; m &= (uint8_t)(m - 1)) {{",
+                f"for (uint8_t m__ = (uint8_t)(fila__ & 0x{mascara:02X}); m__ != 0; m__ &= (uint8_t)(m__ - 1)) {{",
                 f"    {destino} ^= 1;",
                 "}"]
 
@@ -183,7 +183,7 @@ def _pasos_pic(circuito, salida):
             prueba, comentario = f"{destino} = 1;", format_product(patron, variables)
         else:
             prueba, comentario = f"{destino} = 0;", f"{format_sum(patron, variables)} vale 0"
-        lineas.append(f"if ((x & 0x{mascara:02X}) == 0x{valor:02X}) {prueba}   // {comentario}")
+        lineas.append(f"if ((fila__ & 0x{mascara:02X}) == 0x{valor:02X}) {prueba}   // {comentario}")
     return lineas
 
 
@@ -256,10 +256,12 @@ static void configurar(void)
     lineas.append(f"        // 1. leer las entradas en un byte: {circuito.entradas[0]} es el bit "
                   f"{n - 1} y {circuito.entradas[-1]} el bit 0,")
     lineas.append("        //    igual que el numero de fila de la tabla de verdad")
-    lineas.append("        uint8_t x = 0;")
+    # "fila__" con doble guion bajo: ningun nombre de senal puede tenerlo
+    # (validar_nombres lo prohibe), asi que nunca choca con una entrada X.
+    lineas.append("        uint8_t fila__ = 0;")
     for k, r in enumerate(entradas):
         p, bit = _puerto(r["pin"])
-        lineas.append(f"        if (PORT{p}bits.R{p}{bit}) x |= 0x{1 << (n - 1 - k):02X};"
+        lineas.append(f"        if (PORT{p}bits.R{p}{bit}) fila__ |= 0x{1 << (n - 1 - k):02X};"
                       f"   // {r['senal']}")
     lineas.append("\n        // 2. evaluar: cada termino minimizado es una mascara (que variables")
     lineas.append("        //    mira) y un valor (como deben estar). Es la misma ecuacion de")

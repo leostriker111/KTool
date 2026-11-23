@@ -307,6 +307,59 @@ def alarma_de_coche():
         lambda b: {"AL": int((not b["PI"]) or (not b["PD"]) or (b["SW"] and not b["CINT"]))})
 
 
+# -------------------------------------------- secuenciales (Circuitos Secuenciales)
+# Se abren en el editor de maquinas de estado. Son los del Desarrollo y el
+# Cuestionario de la practica; los que traen una ambiguedad en el enunciado lo
+# dicen en su titulo.
+
+def _contador(*args, **kw):
+    from .fsm import contadores
+    return contadores.contador(*args, **kw)
+
+
+def mod13_descendente():
+    from .fsm.contadores import descendente
+    return _contador("Contador mod-13 descendente", {"": descendente(13)})
+
+
+def mod8_secuencia_con_paro():
+    return _contador("Contador mod-8: 4,7,2,6,0,3,5,1 (X=1 paro)",
+                     {"0": [4, 7, 2, 6, 0, 3, 5, 1], "1": "paro"}, ["X"])
+
+
+def mod16_con_x_y():
+    from .fsm.contadores import ascendente
+    return _contador("Contador mod-16 con X Y (00 sube, 01 paro, 10 reinicio, 11 multiplos de 3)",
+                     {"00": ascendente(16), "01": "paro", "10": "reinicio",
+                      "11": [15, 12, 9, 6, 3, 0]}, ["X", "Y"])
+
+
+def mod6_descendente():
+    from .fsm.contadores import descendente
+    return _contador("Contador mod-6 descendente", {"": descendente(6)})
+
+
+def mod11_ascendente():
+    from .fsm.contadores import ascendente
+    return _contador("Contador mod-11 ascendente", {"": ascendente(11)})
+
+
+def mod8_pares_impares():
+    return _contador("Contador mod-8: X=0 pares sube, X=1 impares baja",
+                     {"0": [0, 2, 4, 6], "1": [7, 5, 3, 1]}, ["X"])
+
+
+def mod16_multiplos_de_5():
+    return _contador("Contador mod-16: 00 multiplos de 5, 01 paro, 10 SET, 11 multiplos de 3 baja",
+                     {"00": [0, 5, 10, 15], "01": "paro", "10": "set",
+                      "11": [15, 12, 9, 6, 3, 0]}, ["X", "Y"])
+
+
+def mod16_multiplos_de_4_primos():
+    return _contador("Contador mod-16: 00 multiplos de 4, 01 paro, 10 reinicio, 11 primos baja",
+                     {"00": [0, 4, 8, 12], "01": "paro", "10": "reinicio",
+                      "11": [13, 11, 7, 5, 3, 2]}, ["X", "Y"])
+
 # El orden y los nombres del menu Archivo > Ejemplos
 CATALOGO = [
     ("Combinacionales", [
@@ -342,5 +395,15 @@ CATALOGO = [
         ("Mezcladora de 4 sustancias", mezcladora),
         ("Juego de adivinar", juego_de_adivinar),
         ("Alarma de coche", alarma_de_coche),
+    ]),
+    ("Contadores (maquinas de estado)", [
+        ("Mod-13 descendente", mod13_descendente),
+        ("Mod-8: 4,7,2,6,0,3,5,1 con paro", mod8_secuencia_con_paro),
+        ("Mod-16 con X Y", mod16_con_x_y),
+        ("Mod-6 descendente", mod6_descendente),
+        ("Mod-11 ascendente", mod11_ascendente),
+        ("Mod-8 pares / impares", mod8_pares_impares),
+        ("Mod-16 multiplos de 5 y SET", mod16_multiplos_de_5),
+        ("Mod-16 multiplos de 4 y primos", mod16_multiplos_de_4_primos),
     ]),
 ]

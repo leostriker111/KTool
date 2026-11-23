@@ -1,0 +1,31 @@
+{
+  "name": "Contador decimal 0-9 (BCD a 7 segmentos)",
+  "kind": "moore",
+  "inputs": [],
+  "state_bits": ["Q3", "Q2", "Q1", "Q0"],
+  "outputs": ["a", "b", "c", "d", "e", "f", "g"],
+  "states": [
+    { "name": "D0", "code": "0000", "label": "0", "out": "1111110" },
+    { "name": "D1", "code": "0001", "label": "1", "out": "0110000" },
+    { "name": "D2", "code": "0010", "label": "2", "out": "1101101" },
+    { "name": "D3", "code": "0011", "label": "3", "out": "1111001" },
+    { "name": "D4", "code": "0100", "label": "4", "out": "0110011" },
+    { "name": "D5", "code": "0101", "label": "5", "out": "1011011" },
+    { "name": "D6", "code": "0110", "label": "6", "out": "1011111" },
+    { "name": "D7", "code": "0111", "label": "7", "out": "1110000" },
+    { "name": "D8", "code": "1000", "label": "8", "out": "1111111" },
+    { "name": "D9", "code": "1001", "label": "9", "out": "1111011" }
+  ],
+  "transitions": [
+    { "from": "D0", "in": "", "to": "D1" },
+    { "from": "D1", "in": "", "to": "D2" },
+    { "from": "D2", "in": "", "to": "D3" },
+    { "from": "D3", "in": "", "to": "D4" },
+    { "from": "D4", "in": "", "to": "D5" },
+    { "from": "D5", "in": "", "to": "D6" },
+    { "from": "D6", "in": "", "to": "D7" },
+    { "from": "D7", "in": "", "to": "D8" },
+    { "from": "D8", "in": "", "to": "D9" },
+    { "from": "D9", "in": "", "to": "D0" }
+  ]
+}
