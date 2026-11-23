@@ -24,8 +24,9 @@ GUIA_RAPIDA = (
     "4. 'Forma' decide la realizacion para todo lo de abajo.\n"
     "5. Abajo, en Resultados: Ecuaciones, Portada (los datos del reporte),\n"
     "   Generar (palomeas lo que quieres y sale todo de un clic), Protoboard\n"
-    "   y Kit de hardware.\n"
-    "6. Archivo guarda y abre proyectos (.ktool.json) y trae ejemplos listos.\n\n"
+    "   y Kit de hardware (placas, pines, ajustes y archivos).\n"
+    "6. Archivo guarda y abre proyectos (.ktool.json) y trae ejemplos listos.\n"
+    "7. Herramientas: calculadora de frecuencia y texto a segmentos.\n\n"
     "Las guias de Ayuda > Guias explican cada parte con calma."
 )
 
@@ -78,16 +79,42 @@ GUIAS = {
     ),
     "Kit de hardware y pines": (
         "KIT DE HARDWARE\n\n"
-        "El circuito como codigo para PIC (18F4550, 18F45K50, 16F877A, 16F628A,\n"
-        "16F84A), ESP32, Arduino, Blue Pill, Pico, VHDL/Verilog, la MAX II, la\n"
-        "GAL22V10 y chips 74LS, con la tabla de pines al inicio de cada archivo.\n\n"
+        "Armado > Kit de hardware abre su ventana. A la izquierda, cada placa o\n"
+        "salida (PIC, ESP32, Arduino, Blue Pill, Pico, MAX II, VHDL/Verilog,\n"
+        "GAL22V10, 74LS, Python): la columna Usar dice cuales se generan.\n\n"
+        "Pines: el componente dibujado tal como es (el PIC en su DIP-40, la MAX II\n"
+        "en su TQFP-100, el Arduino con sus cabezales). Clic en una senal y luego\n"
+        "en la pata, o arrastrala. Las patas de alimentacion, JTAG o de la flash\n"
+        "no se dejan; las de reserva avisan por que.\n\n"
+        "Ajustes: lo que cambia el codigo sin cambiar el circuito: oscilador y\n"
+        "lenguaje (C o ensamblador) del PIC, entradas y salidas activas en bajo,\n"
+        "INPUT_PULLUP en Arduino, el reloj y la frecuencia de la MAX II.\n\n"
+        "Archivos: cada archivo generado, para revisarlo y corregirlo a mano.\n"
+        "Lo corregido se conserva al regenerar y es lo que sale en el documento.\n\n"
         "Si una placa no alcanza (pines, memoria, macroceldas) lo dice con la\n"
-        "cuenta en vez de escribir codigo roto.\n\n"
-        "Pines fijos: si tu placa trae LEDs o botones en pines fijos, escoge la\n"
-        "placa y escribe sus pines: primero las entradas y luego las salidas,\n"
-        "en el orden que te indica la pestana. Cada placa recuerda los suyos.\n"
-        "Un pin de alimentacion, tierra, JTAG o de la flash se rechaza con el\n"
-        "motivo."
+        "cuenta en vez de escribir codigo roto."
+    ),
+    "Calculadora de frecuencia": (
+        "CALCULADORA DE FRECUENCIA\n\n"
+        "Herramientas > Calculadora de frecuencia.\n\n"
+        "Divisor digital: del reloj de entrada (50 MHz en la MAX II, el oscilador\n"
+        "del PIC) a la frecuencia o el periodo que pides. Da la cuenta de medio\n"
+        "periodo (T/2), los bits del contador y el error, y dibuja la onda.\n"
+        "Abajo esta el mismo calculo escrito en VHDL, C, ensamblador y Arduino.\n\n"
+        "555 astable: R1, R2 y C comerciales para una frecuencia.\n\n"
+        "Cada dato tiene su boton de copiar (los dos cuadritos), que copia el\n"
+        "valor sin unidades. 'Usar en el kit' pone la frecuencia en los ajustes\n"
+        "de las placas del kit. Los valores aceptan prefijos: 50M, 1k, 10u."
+    ),
+    "Displays y texto": (
+        "DISPLAYS Y TEXTO A SEGMENTOS\n\n"
+        "Insertar > Display agrega un display de 7, 14 o 16 segmentos, una barra\n"
+        "de 10 LEDs o un LED. Cada segmento se conecta con la salida del mismo\n"
+        "nombre y se enciende con la fila seleccionada. Clic en un segmento para\n"
+        "cambiarle el nombre.\n\n"
+        "Herramientas > Texto a segmentos: escribes un mensaje, eliges el display\n"
+        "y catodo o anodo comun, y 'Crear tabla' arma la tabla de verdad (un\n"
+        "caracter por fila) con el display ya insertado."
     ),
     "Proyectos y ejemplos": (
         "PROYECTOS Y EJEMPLOS\n\n"

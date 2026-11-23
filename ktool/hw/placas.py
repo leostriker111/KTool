@@ -181,6 +181,10 @@ ESP32 = {
             8: "pin de strapping (y LED en varias placas): debe arrancar en alto",
             9: "pin de strapping (boton BOOT): si arranca en bajo, entra a modo "
                "de grabacion",
+            4: "es MTMS del JTAG: deja de servir para depurar por JTAG",
+            5: "es MTDI del JTAG: deja de servir para depurar por JTAG",
+            6: "es MTCK del JTAG: deja de servir para depurar por JTAG",
+            7: "es MTDO del JTAG: deja de servir para depurar por JTAG",
         },
         "solo_entrada": [],
         "sin_pulldown": [],

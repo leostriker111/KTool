@@ -11,7 +11,7 @@ import datetime
 
 from .. import __version__
 from ..core.simplify import literal_pairs
-from . import placas
+from . import ajustes, placas
 from .modelo import Bloqueo, ecuacion, tabla_de_pines
 
 
@@ -211,8 +211,70 @@ def celdas_max_ii(circuito):
     return por_salida * (circuito.n_salidas - constantes)
 
 
-def qsf(circuito, renglones):
+def nombre_max2(circuito):
+    """La entidad de nivel superior para la MAX II cuando hay que invertir algo."""
+    return f"{circuito.nombre}_max2"
+
+
+def vhdl_max2(circuito, valores):
+    """Envoltura para la tarjeta: invierte entradas o salidas activas en bajo.
+
+    El circuito (circuito.vhd) se queda igual que la tabla: asi su banco de
+    prueba sigue valiendo. La inversion de los botones y LEDs de la tarjeta es
+    cosa del armado, y vive en esta capa aparte. Devuelve None si no hay nada
+    que invertir (entonces la entidad de nivel superior es el circuito mismo).
+    """
+    entradas_bajo = ajustes.entradas_invertidas(valores)
+    salidas_bajo = ajustes.salidas_invertidas(valores)
+    if not (entradas_bajo or salidas_bajo):
+        return None
+    top, nombre = nombre_max2(circuito), circuito.nombre
+    puertos = [f"        {e} : in  std_logic" for e in circuito.entradas]
+    puertos += [f"        {s} : out std_logic" for s in circuito.salidas]
+    senales = [f"    signal c_{s} : std_logic;" for s in circuito.salidas]
+    mapa = [f"            {e} => {'not ' if entradas_bajo else ''}{e}" for e in circuito.entradas]
+    mapa += [f"            {s} => c_{s}" for s in circuito.salidas]
+    salidas = [f"    {s} <= {'not ' if salidas_bajo else ''}c_{s};" for s in circuito.salidas]
+    notas = []
+    if entradas_bajo:
+        notas.append("-- Entradas activas en bajo: el boton presionado (0 en la pata) vale 1.")
+    if salidas_bajo:
+        notas.append("-- Salidas activas en bajo: el LED enciende con 0 en la pata.")
+    return f"""\
+-- {top} -- generado por ktool {__version__}
+-- Nivel superior para la tarjeta MAX II: conecta {nombre} a los botones y LEDs.
+{chr(10).join(notas)}
+-- La logica esta en {nombre}.vhd, sin cambios respecto a la tabla.
+
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+entity {top} is
+    port (
+{(';' + chr(10)).join(puertos)}
+    );
+end entity {top};
+
+architecture tarjeta of {top} is
+{chr(10).join(senales)}
+begin
+    logica : entity work.{nombre}
+        port map (
+{(',' + chr(10)).join(mapa)}
+        );
+{chr(10).join(salidas)}
+end architecture tarjeta;
+"""
+
+
+def qsf(circuito, renglones, valores=None):
     """Restricciones de Quartus Prime para la MAX II EPM240T100C5."""
+    valores = valores or {}
+    envoltura = vhdl_max2(circuito, valores) is not None
+    top = nombre_max2(circuito) if envoltura else circuito.nombre
+    archivos = f"set_global_assignment -name VHDL_FILE {circuito.nombre}.vhd"
+    if envoltura:
+        archivos += f"\nset_global_assignment -name VHDL_FILE {top}.vhd"
     lineas = [f"""\
 # {circuito.nombre} en {placas.EPM240['titulo']} -- generado por ktool {__version__}
 # Quartus Prime: abre {circuito.nombre}.qpf y compila. Las patas salen de la tabla
@@ -230,9 +292,9 @@ def qsf(circuito, renglones):
 
 set_global_assignment -name FAMILY "MAX II"
 set_global_assignment -name DEVICE EPM240T100C5
-set_global_assignment -name TOP_LEVEL_ENTITY {circuito.nombre}
-set_global_assignment -name VHDL_FILE {circuito.nombre}.vhd
-# Para usar la version en Verilog, cambia la linea de arriba por:
+set_global_assignment -name TOP_LEVEL_ENTITY {top}
+{archivos}
+# Para usar la version en Verilog, cambia la linea de {circuito.nombre}.vhd por:
 # set_global_assignment -name VERILOG_FILE {circuito.nombre}.v
 
 # El VHDL generado se valido en VHDL-1993 estricto (y en 2008).

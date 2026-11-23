@@ -2,6 +2,36 @@
 
 ## Sin publicar
 
+- Fase 5, kit de hardware redisenado: *Armado > Kit de hardware* abre una ventana con las
+  plataformas a generar (columna Usar), un **planificador de pines** que dibuja el componente
+  real (PIC en DIP-40 y DIP-18, MAX II en TQFP-100 con sus bancos, Arduino Uno/Nano/Mega,
+  ESP32, Blue Pill y Pico con sus cabezales; clic o arrastre para asignar, patas de
+  alimentacion/JTAG/flash rechazadas, avisos de reserva), **ajustes por placa** (lenguaje y
+  oscilador del PIC 18F, MCLR, entradas y salidas activas en bajo, INPUT_PULLUP, reloj,
+  frecuencia, metodo VHDL y reset de la MAX II, retardo y monitor serie de Arduino) y la
+  **vista previa editable** de cada archivo (lo corregido a mano se conserva al regenerar).
+  Toda la configuracion se guarda en el proyecto y el documento la describe: placas, dibujo
+  con las patas asignadas, ajustes y archivos, con los editados marcados. Al imprimir, el
+  codigo plegado se abre.
+- PIC 18F45K50 y 18F4550 en **ensamblador** (`.S` para pic-as): mismas palabras de
+  configuracion que el `.c`, cada termino como comparacion de mascara. Verificado: 192
+  archivos (C y ensamblador, dos chips, con y sin ajustes) compilan y ensamblan sin una
+  advertencia.
+- **Kit para maquinas de estado** (editor de maquinas > *Kit de hardware...*): PIC 18F en C y
+  en ensamblador, Arduino y la MAX II con su divisor de reloj, el reset y el `.qsf` con el
+  reloj en una GCLK; el reporte de la maquina puede traer el kit con el calculo del reloj de
+  cada placa.
+- Fase 3, reloj: **calculadora de frecuencia** (*Herramientas*): divisor digital (cuenta de
+  T/2, bits del contador, error) y 555 astable (R1, R2 y C comerciales), con la onda dibujada,
+  cada dato con su boton de copiar y el calculo escrito en VHDL, C (XC8), ensamblador y Arduino;
+  *Usar en el kit* pasa la frecuencia a los ajustes. En la terminal: `ktool reloj --entrada 50M
+  --periodo 3`, `--codigo vhdl|c|asm|arduino`, `--555`.
+- Fase 4, displays: *Insertar > Display* agrega 14 y 16 segmentos y la barra de 10 LEDs;
+  *Herramientas > Texto a segmentos* convierte un mensaje en tabla de verdad para 7, 14 o 16
+  segmentos (catodo o anodo comun) y la abre con su display. Ejemplos nuevos: BCD a 14 y 16
+  segmentos, el alfabeto en los tres displays, HOLA y la barra de LEDs.
+- El boton de copiar es el mismo icono (dos cuadritos) en la ventana y en el documento.
+
 - Fase 2, maquinas de estado: se junta el motor de la rama beta (Moore/Mealy, excitacion D/JK/T/SR,
   diagrama, reporte, editor en la ventana con scroll) y se agrega: contadores (`ktool contador`:
   modulo, secuencia propia, modos por entradas X/Y con paro, reinicio y set), `ktool fsm`, el VHDL

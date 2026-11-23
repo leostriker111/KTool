@@ -12,6 +12,8 @@ Convertidores de codigo (catodo comun: 1 = segmento encendido).
 
 from __future__ import annotations
 
+from . import segmentos
+
 X = "x"   # no importa
 
 # BCD -> segmentos a..g, catodo comun (tabla de la practica de Convertidores)
@@ -142,6 +144,69 @@ def hexadecimal_a_7_segmentos_anodo():
         "Hexadecimal a 7 segmentos (anodo comun)",
         "0 a F; anodo comun: 0 = segmento encendido.",
         BCD, SEGMENTOS, f)
+
+
+# Los de 14 y 16 segmentos, el alfabeto, el mensaje y la barra salen de las
+# tipografias de ktool/segmentos.py (los nombres de cada segmento estan
+# dibujados al principio de ese archivo).
+
+def bcd_a_14_segmentos():
+    def f(b):
+        n = _numero(b, BCD)
+        if n > 9:
+            return {s: X for s in segmentos.TIPOS["14seg"]}
+        return segmentos.segmentos(str(n), "14seg")
+    return _proyecto(
+        "BCD a 14 segmentos (catodo comun)",
+        "Cada salida es un segmento del display alfanumerico: 1 = encendido. "
+        "De 10 a 15 no importa.",
+        BCD, segmentos.TIPOS["14seg"], f)
+
+
+def bcd_a_16_segmentos():
+    def f(b):
+        n = _numero(b, BCD)
+        if n > 9:
+            return {s: X for s in segmentos.TIPOS["16seg"]}
+        return segmentos.segmentos(str(n), "16seg")
+    return _proyecto(
+        "BCD a 16 segmentos (catodo comun)",
+        "Cada salida es un segmento; a1 y a2 son las mitades de arriba, d1 y d2 las de "
+        "abajo. 1 = encendido. De 10 a 15 no importa.",
+        BCD, segmentos.TIPOS["16seg"], f)
+
+
+def _letras(tipo):
+    """Las letras A-Z que tienen forma en ese display, en orden."""
+    return "".join(c for c in segmentos.soportados(tipo) if c.isalpha())
+
+
+def alfabeto_7_segmentos():
+    letras = _letras("7seg")
+    return segmentos.proyecto_mensaje(
+        letras, "7seg", titulo=f"Alfabeto en 7 segmentos ({len(letras)} letras)")
+
+
+def alfabeto_14_segmentos():
+    return segmentos.proyecto_mensaje(_letras("14seg"), "14seg",
+                                      titulo="Alfabeto en 14 segmentos")
+
+
+def alfabeto_16_segmentos():
+    return segmentos.proyecto_mensaje(_letras("16seg"), "16seg",
+                                      titulo="Alfabeto en 16 segmentos")
+
+
+def mensaje_hola_16_segmentos():
+    return segmentos.proyecto_mensaje("HOLA", "16seg")
+
+
+def barra_10_leds_nivel():
+    return segmentos.proyecto_barra(10, "nivel")
+
+
+def barra_10_leds_punto():
+    return segmentos.proyecto_barra(10, "punto")
 
 
 # ---------------------------------------------------------------- aritmeticos
@@ -372,6 +437,14 @@ CATALOGO = [
     ("Displays", [
         ("BCD a 7 segmentos (catodo comun)", bcd_a_7_segmentos),
         ("Hexadecimal a 7 segmentos (anodo comun)", hexadecimal_a_7_segmentos_anodo),
+        ("BCD a 14 segmentos", bcd_a_14_segmentos),
+        ("BCD a 16 segmentos", bcd_a_16_segmentos),
+        ("Alfabeto en 7 segmentos", alfabeto_7_segmentos),
+        ("Alfabeto en 14 segmentos", alfabeto_14_segmentos),
+        ("Alfabeto en 16 segmentos", alfabeto_16_segmentos),
+        ("Mensaje HOLA en 16 segmentos", mensaje_hola_16_segmentos),
+        ("Barra de 10 LEDs (nivel)", barra_10_leds_nivel),
+        ("Barra de 10 LEDs (punto)", barra_10_leds_punto),
     ]),
     ("Aritmeticos", [
         ("Semisumador", semisumador),

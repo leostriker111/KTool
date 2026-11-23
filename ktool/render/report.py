@@ -29,6 +29,7 @@ class Options:
         proto_color_salidas=None,  # None/'arcoiris', o un color fijo (nombre o hex)
         kit=False,          # incluir el kit de hardware: pines y codigo por placa
         kit_pines=None,     # {placa: [pines]} para las placas con pines fijos
+        kit_config=None,    # ConfigKit de la ventana (hw/configuracion.py): manda sobre kit_pines
         portada=None,       # {campo: texto} de CAMPOS_PORTADA; None = sin portada
     ):
         self.form = form
@@ -46,6 +47,7 @@ class Options:
         self.proto_color_salidas = proto_color_salidas
         self.kit = kit
         self.kit_pines = kit_pines or {}
+        self.kit_config = kit_config
         self.portada = portada
 
 
@@ -97,22 +99,59 @@ def _seccion_portada(datos, titulo_por_omision):
     return "".join(partes)
 
 
-def _seccion_kit(table, opt):
-    """El kit de hardware dentro del documento: que placa salio, con que pines, y
-    el codigo de cada una en un bloque plegable con su boton de copiar.
+# El icono de copiar (dos cuadritos), el mismo que dibuja la ventana
+# (gui/copiar.py). currentColor: toma el color del boton, que se pone verde al copiar.
+ICONO_COPIAR = ("<svg width='13' height='13' viewBox='0 0 18 18' aria-hidden='true'>"
+                "<rect x='2' y='2' width='10' height='10' fill='none' stroke='currentColor' "
+                "stroke-width='1.6'/><rect x='6' y='6' width='10' height='10' fill='#f3f3f3' "
+                "stroke='currentColor' stroke-width='1.6'/></svg>")
 
-    Es lo mismo que escribe `--hw` en una carpeta (hw/kit.py), armado en
-    memoria. Si un pin que pidio el usuario no sirve, lanza ValueError.
+
+def boton_copiar(texto, etiqueta=""):
+    """Boton que copia `texto`: el icono y, si hay, una etiqueta corta ('C', 'tabla').
+
+    data-clip va entre comillas DOBLES: _attr solo escapa esas, y el VHDL ('0')
+    y la GAL ('b'1) traen comillas simples."""
+    extra = f"<span>{_esc(etiqueta)}</span>" if etiqueta else ""
+    return (f"<button class='copybtn' title='Copiar' data-clip=\"{_attr(texto)}\">"
+            f"{ICONO_COPIAR}{extra}</button>")
+
+
+def _seccion_kit(table, opt):
+    """El kit de hardware dentro del documento (ver `seccion_kit`).
+
+    Con `opt.kit_config` (la ventana) sale exactamente lo que se configuro: las
+    placas marcadas, sus pines, sus ajustes y los archivos editados a mano. Sin
+    ella (la CLI), todas las placas con `opt.kit_pines`. ValueError si un pin
+    no sirve.
     """
     from ..hw import kit as _kit
 
     forma = opt.form if opt.form in ("sop", "pos", "nand", "nor") else "auto"
-    armado = _kit.armar(table, forma, opt.kit_pines)
+    if opt.kit_config is not None:
+        armado = opt.kit_config.armar(table, forma)
+    else:
+        armado = _kit.armar(table, forma, opt.kit_pines)
+    return seccion_kit(armado, opt.kit_config)
+
+
+def seccion_kit(armado, config=None, extra_por_placa=None, secuencial=False):
+    """HTML del kit: estado de cada plataforma, y por placa el dibujo del
+    componente con sus patas asignadas, la tabla de pines y sus ajustes; al final
+    cada archivo en un bloque plegable con su boton de copiar.
+
+    `extra_por_placa`: {titulo: html} que se agrega bajo los ajustes de esa
+    placa (la maquina de estados pone ahi el calculo de su reloj).
+    """
+    from ..hw import kit as _kit
+
+    extra_por_placa = extra_por_placa or {}
+    clave_de = {titulo: clave for clave, titulo in _kit.PLATAFORMAS}
+    ajustes = dict(config.resumen_ajustes(secuencial)) if config is not None else {}
     partes = ["<h2>Kit de hardware</h2>",
-              "<p class='hint'>El circuito listo para grabar en cada placa. Cada archivo "
-              "empieza con su tabla de pines; una placa que no alcanza dice por que. Para "
-              "tenerlos como archivos: <code>ktool ... --hw carpeta</code> o el boton "
-              "<i>Escribir kit</i> de la ventana.</p>",
+              "<p class='hint'>El circuito listo para grabar en cada placa, con la "
+              "configuracion elegida: pines, ajustes y archivos. Cada archivo empieza con "
+              "su tabla de pines; una placa que no alcanza dice por que.</p>",
               "<table class='shared'><thead><tr><th>Plataforma</th><th>Estado</th>"
               "<th>Archivos o motivo</th></tr></thead><tbody>"]
     for plataforma, estado, detalle in armado.resumen:
@@ -121,7 +160,10 @@ def _seccion_kit(table, opt):
     partes.append("</tbody></table>")
 
     for plataforma, renglones in armado.pines.items():
-        partes.append(f"<h3>Pines: {_esc(plataforma)}</h3>")
+        partes.append(f"<h3>{_esc(plataforma)}</h3>")
+        dibujo = _dibujo_de_placa(clave_de.get(plataforma), renglones)
+        if dibujo:
+            partes.append(f"<div class='diagram placa'>{dibujo}</div>")
         partes.append("<table class='shared'><thead><tr><th>Senal</th><th>Pin</th>"
                       "<th>Direccion</th><th>Nota</th></tr></thead><tbody>")
         for r in renglones:
@@ -129,18 +171,33 @@ def _seccion_kit(table, opt):
                           f"<td><code>{_esc(str(r['pin']))}</code></td>"
                           f"<td>{_esc(r['direccion'])}</td><td>{_esc(r['aviso'])}</td></tr>")
         partes.append("</tbody></table>")
+        if plataforma in ajustes:
+            partes.append("<table class='shared ajustes'><thead><tr><th>Ajuste</th>"
+                          "<th>Valor</th></tr></thead><tbody>")
+            for etiqueta, valor in ajustes[plataforma]:
+                partes.append(f"<tr><td>{_esc(etiqueta)}</td><td>{_esc(valor)}</td></tr>")
+            partes.append("</tbody></table>")
+        partes.append(extra_por_placa.get(plataforma, ""))
 
     partes.append("<h3>Archivos</h3>")
     for ruta, texto in armado.archivos.items():
         if ruta == "LEEME.md":   # su contenido ya es la tabla de arriba
             continue
+        marca = " <span class='hint'>(editado a mano)</span>" if ruta in armado.editados else ""
         partes.append(
-            f"<details class='guide'><summary><code>{_esc(ruta)}</code></summary>"
-            # data-clip entre comillas DOBLES: _attr solo escapa esas, y el VHDL
-            # ('0') y la GAL ('b'1) traen comillas simples
-            f"<div class='langhead'><button class='copybtn' data-clip=\"{_attr(texto)}\">"
-            f"copiar</button></div><pre class='langpre'>{_esc(texto)}</pre></details>")
+            f"<details class='guide'><summary><code>{_esc(ruta)}</code>{marca}</summary>"
+            f"<div class='langhead'>{boton_copiar(texto)}</div>"
+            f"<pre class='langpre'>{_esc(texto)}</pre></details>")
     return "".join(partes)
+
+
+def _dibujo_de_placa(clave, renglones):
+    """El componente dibujado con sus patas asignadas, o '' si no hay dibujo."""
+    from ..hw import encapsulados
+
+    if clave not in encapsulados.ENCAPSULADOS:
+        return ""
+    return encapsulados.svg(clave, {r["pin"]: r["senal"] for r in renglones})
 
 
 def _seccion_protoboard(table, solutions, opt):
@@ -356,7 +413,7 @@ def _languages_section(table, solutions, opt_langs):
         parts.append("<div class='langblock'>")
         parts.append(
             f"<div class='langhead'>{_esc(lang)} "
-            f"<button class='copybtn' data-clip=\"{_attr(blob)}\">copiar {_esc(lang)}</button></div>"
+            f"{boton_copiar(blob, lang)}</div>"
         )
         parts.append(f"<pre class='langpre'>{_esc(blob)}</pre>")
         parts.append("</div>")
@@ -402,7 +459,7 @@ def build_report(table, opt=None):
     if opt.table:
         body.append(
             "<h2>Tabla de verdad "
-            f"<button class='copybtn' data-clip=\"{_attr(_table_tsv(table))}\">copiar tabla</button></h2>"
+            f"{boton_copiar(_table_tsv(table), 'tabla')}</h2>"
         )
         body.append(_truth_table_html(table))
 
@@ -567,8 +624,11 @@ table{border-collapse:collapse;margin:8px 0;}
 .langpre{background:#f6f6f6;border:1px solid #ddd;border-radius:5px;padding:9px 11px;
   font-family:Consolas,monospace;font-size:13px;white-space:pre;overflow-x:auto;margin:0;}
 .copybtn{font-size:11px;border:1px solid #aaa;background:#f3f3f3;border-radius:4px;
-  padding:2px 8px;cursor:pointer;}
+  padding:2px 7px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;color:#444;}
 .copybtn:hover{background:#e2e8f5;}
+.copybtn.hecho{color:#2a8a3a;border-color:#2a8a3a;}
+.placa{margin:8px 0 12px;} .placa svg{max-width:100%;height:auto;}
+.ajustes{margin-top:8px;}
 .portada{border-bottom:2px solid #222;padding-bottom:14px;margin-bottom:18px;}
 .portada h1{font-size:28px;margin-bottom:4px;}
 .portada .subtitulo{font-size:17px;color:#444;margin-top:0;}
@@ -586,9 +646,14 @@ _CLIP_SCRIPT = """
 document.addEventListener('click', function(e){
   var b = e.target.closest('.copybtn'); if(!b) return;
   navigator.clipboard.writeText(b.dataset.clip).then(function(){
-    var t = b.textContent; b.textContent = 'copiado';
-    setTimeout(function(){ b.textContent = t; }, 1200);
+    b.classList.add('hecho');
+    setTimeout(function(){ b.classList.remove('hecho'); }, 1200);
   });
+});
+// Al imprimir (o guardar como PDF) se abren los bloques plegados: en papel el
+// codigo tiene que verse.
+window.addEventListener('beforeprint', function(){
+  document.querySelectorAll('details').forEach(function(d){ d.open = true; });
 });
 </script>
 """

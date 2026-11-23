@@ -16,6 +16,7 @@ from ..fsm import Machine, flipflops
 from ..render.fsm_report import build_fsm_report, save_report
 from ..render.fsm_diagram import _seg7_polys, _node_positions
 from .. import io as ktio, theme
+from ..hw.configuracion import ConfigKit
 
 _STATE_COLS = [("name", "nombre", 8), ("code", "codigo", 7),
                ("label", "etiq.", 6), ("out", "salida (abc..g)", 14)]
@@ -48,6 +49,8 @@ class FsmView:
         self.trans_rows = []
         self._redraw_job = None
         self._inicial = None
+        self.kit_config = ConfigKit()     # se guarda con la maquina y sale en el reporte
+        self.con_kit = tk.BooleanVar(value=True)
         self._build()
         self._fill(_DEMO)
 
@@ -115,6 +118,9 @@ class FsmView:
         ttk.Button(foot, text="Generar reporte...", command=self.generate).pack(side=tk.LEFT)
         ttk.Button(foot, text="Escribir VHDL...", command=self.escribir_vhdl).pack(side=tk.LEFT,
                                                                                    padx=6)
+        ttk.Button(foot, text="Kit de hardware...", command=self.abrir_kit).pack(side=tk.LEFT)
+        ttk.Checkbutton(foot, text="Kit en el reporte", variable=self.con_kit).pack(
+            side=tk.LEFT, padx=6)
         ttk.Separator(foot, orient="vertical").pack(side=tk.LEFT, fill=tk.Y, padx=6)
         ttk.Button(foot, text="Contador...", command=self.contador).pack(side=tk.LEFT)
         ttk.Button(foot, text="Abrir...", command=self.load).pack(side=tk.LEFT, padx=6)
@@ -305,6 +311,8 @@ class FsmView:
         def join(v):
             return ", ".join(v) if isinstance(v, list) else str(v or "")
         self._inicial = src.get("inicial")
+        # la configuracion del kit es de ESTA maquina: sus pines no sirven en otra
+        self.kit_config = ConfigKit.desde_dict(src.get("kit"))
         self.e_name.delete(0, tk.END); self.e_name.insert(0, src.get("name", ""))
         self.cb_kind.set(src.get("kind") if src.get("kind") in ("moore", "mealy") else "moore")
         self.cb_ff.set(src.get("ff", "JK"))
@@ -345,7 +353,7 @@ class FsmView:
             fuente = self._to_dict()
             machine = Machine.from_dict(fuente)
             html = build_fsm_report(machine, ff_kind=self.cb_ff.get(), fuente=fuente,
-                                    portada=self._portada())
+                                    portada=self._portada(), kit_html=self._kit_html(fuente))
         except (ValueError, KeyError) as e:
             self.status.config(text=f"Error: {e}")
             return
@@ -356,6 +364,27 @@ class FsmView:
             return
         saved = save_report(html, path, open_browser=True)
         self.status.config(text=f"Reporte en {saved} (abierto en el navegador)", foreground="#555")
+
+    def abrir_kit(self):
+        """La misma ventana del kit que la de las tablas, con esta maquina."""
+        from .kit_ventana import FuenteMaquina, VentanaKit
+        try:
+            Machine.from_dict(self._to_dict())
+        except (ValueError, KeyError) as e:
+            self.status.config(text=f"Error: {e}", foreground="#a00")
+            return
+        VentanaKit(self.root, self.kit_config, FuenteMaquina(self))
+
+    def _kit_html(self, fuente):
+        """La seccion del kit para el reporte, con el calculo del reloj de cada
+        placa; vacia si no se palomeo 'Kit en el reporte'."""
+        from ..hw import kit_fsm
+        from ..render.report import seccion_kit
+        if not self.con_kit.get() or not self.kit_config.elegidas:
+            return ""
+        armado = kit_fsm.armar(fuente, self.kit_config)
+        return seccion_kit(armado, self.kit_config, kit_fsm.seccion_reloj(fuente, self.kit_config),
+                           secuencial=True)
 
     def escribir_vhdl(self):
         """Los tres metodos (ecuaciones con el flip-flop elegido, tabla y estados)
@@ -391,6 +420,7 @@ class FsmView:
             self.status.config(text=f"Error: {e}")
             return
         d["ff"] = self.cb_ff.get()
+        d["kit"] = self.kit_config.a_dict()
         path = filedialog.asksaveasfilename(
             defaultextension=ktio.EXT,
             filetypes=[("Fuente ktool", "*.ktool.json"), ("JSON", "*.json")],

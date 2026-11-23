@@ -210,7 +210,7 @@ class Pines(unittest.TestCase):
         with self.assertRaises(Bloqueo) as e:
             asignar_pines(c, placas.ESP32["esp32_c3"])
         self.assertIn("requiere 6 entradas + 10 salidas = 16 pines", str(e.exception))
-        self.assertIn("13 utilizables (8 seguros + 5 de reserva)", str(e.exception))
+        self.assertIn("13 utilizables (4 seguros + 9 de reserva)", str(e.exception))
 
     def test_el_uno_cede_al_mega(self):
         with tempfile.TemporaryDirectory() as d:
@@ -284,7 +284,8 @@ class Pines(unittest.TestCase):
         tabla = TruthTable(2, outputs={"Y": [0, 1, 1, 0]})
         html = build_report(tabla, Options(kit=True, kit_pines={"max2": [26, 28, 33]}))
         self.assertIn("<h2>Kit de hardware</h2>", html)
-        self.assertIn("Pines: Intel/Altera MAX II EPM240T100C5", html)
+        self.assertIn("<h3>Intel/Altera MAX II EPM240T100C5</h3>", html)
+        self.assertIn("<svg", html.split("<h3>Intel/Altera MAX II")[1])   # el TQFP dibujado
         self.assertIn("<code>fpga/circuito.vhd</code>", html)
         self.assertNotIn("<h2>Kit de hardware</h2>", build_report(tabla, Options()))
 

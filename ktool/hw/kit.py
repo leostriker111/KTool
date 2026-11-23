@@ -29,7 +29,7 @@ from __future__ import annotations
 import os
 
 from .. import __version__
-from . import logica, micros, placas
+from . import ajustes, asm, logica, micros, placas
 from .modelo import Bloqueo, Circuito, asignar_pines, con_pines
 
 PIC_CHIPS = ["pic18f4550", "pic18f45k50", "pic16f877a", "pic16f628a", "pic16f84a"]
@@ -50,19 +50,68 @@ class Kit:
         self.archivos = {}
         self.resumen = []
         self.pines = {}
+        self.editados = set()   # rutas que el usuario corrigio a mano
+        self.archivos_de = {}   # {plataforma: [rutas]}: lo que muestra la vista previa
 
     def listo(self, plataforma, *rutas):
         self.resumen.append((plataforma, "listo", ", ".join(rutas)))
+        self.archivos_de[plataforma] = list(rutas)
 
     def bloqueado(self, plataforma, motivo):
         self.resumen.append((plataforma, "bloqueado", f"Variante bloqueada: {motivo}"))
 
 
+# Todo lo que el kit sabe generar, en el orden del resumen. Las placas con
+# pines son las de placas.PLACAS_CON_PINES; las otras cuatro no tienen pines
+# que elegir.
+PLATAFORMAS = [(nombre, info["titulo"]) for nombre, info in placas.PLACAS_CON_PINES.items()] + [
+    ("hdl", "VHDL y Verilog (con bancos de prueba)"),
+    ("gal22v10", placas.GAL22V10["titulo"]),
+    ("ttl", "Logica discreta 74LS"),
+    ("python", "Simulacion en Python"),
+]
+TITULO_PLATAFORMA = dict(PLATAFORMAS)
+
+
+def pines_en_orden(circuito, placa, mapa):
+    """{senal: pin} del planificador -> la lista en el orden de con_pines.
+
+    El planificador deja asignar solo algunas senales; las que quedan sin pata
+    toman la siguiente libre de la lista de placas.py (entradas de la lista de
+    entradas, salidas de la de salidas, nunca una pata solo-entrada). Si no
+    alcanza, ValueError con la cuenta.
+    """
+    senales = circuito.entradas + circuito.salidas
+    mapa = {s: p for s, p in mapa.items() if s in senales}   # quita senales viejas
+    usados = set(mapa.values())
+    solo_entrada = set(placa.get("solo_entrada", []))
+    pines = []
+    for senal in circuito.entradas + circuito.salidas:
+        if senal in mapa:
+            pines.append(mapa[senal])
+            continue
+        es_entrada = senal in circuito.entradas
+        candidatos = placa["entradas"] if es_entrada else placa["salidas"]
+        libre = next((p for p in candidatos if p not in usados
+                      and (es_entrada or p not in solo_entrada)), None)
+        if libre is None:
+            raise ValueError(f"{placa['titulo']}: no queda pata libre para {senal}")
+        usados.add(libre)
+        pines.append(libre)
+    return pines
+
+
 def _placa(nombre, pines_usuario, circuito):
-    """La placa de placas.PLACAS_CON_PINES, con los pines del usuario si los dio."""
+    """La placa de placas.PLACAS_CON_PINES, con los pines del usuario si los dio.
+
+    Los pines llegan como lista (la CLI: --pines max2=26,28,33) o como
+    {senal: pin} (el planificador de la ventana)."""
     base = placas.PLACAS_CON_PINES[nombre]
     if nombre in pines_usuario:
-        return con_pines(circuito, base, pines_usuario[nombre])
+        elegidos = pines_usuario[nombre]
+        if isinstance(elegidos, dict):
+            elegidos = pines_en_orden(circuito, base, elegidos)
+        return con_pines(circuito, base, elegidos)
     return base
 
 
@@ -75,22 +124,35 @@ def validar_nombres_de_placa(pines_usuario):
                 + ", ".join(placas.PLACAS_CON_PINES))
 
 
-def armar(tabla, forma="auto", pines=None):
+def armar(tabla, forma="auto", pines=None, elegidas=None, ajustes_por_placa=None,
+          editados=None):
     """Arma el kit en memoria y lo devuelve como Kit.
 
-    `pines`: {nombre de placa: [pines]} opcional, con los nombres de
-    placas.PLACAS_CON_PINES (ej. {'max2': [26, 28, 33], 'uno_nano': ['2', '3', '8']}).
-    Los pines se revisan aqui, antes de generar nada: uno que no sirve es un
-    ValueError con el motivo.
+    `pines`: {nombre de placa: [pines] o {senal: pin}} opcional, con los nombres
+    de placas.PLACAS_CON_PINES (ej. {'max2': [26, 28, 33]}). Los pines se revisan
+    aqui, antes de generar nada: uno que no sirve es un ValueError con el motivo.
+    `elegidas`: las claves de PLATAFORMAS que se generan; None = todas (la CLI).
+    `ajustes_por_placa`: {placa: {ajuste: valor}} de la ventana (hw/ajustes.py).
+    `editados`: {ruta: texto} archivos que el usuario corrigio a mano en la vista
+    previa; sustituyen al generado si la ruta sigue existiendo.
     """
     pines = pines or {}
     validar_nombres_de_placa(pines)
+    ajustes_por_placa = ajustes_por_placa or {}
     circuito = Circuito(tabla, forma)
     usadas = {nombre: _placa(nombre, pines, circuito) for nombre in placas.PLACAS_CON_PINES}
     kit = Kit(circuito)
 
+    def quiere(nombre):
+        return elegidas is None or nombre in elegidas
+
+    def valores(nombre):
+        return ajustes.con_omision(nombre, ajustes_por_placa.get(nombre))
+
     # --- PIC
     for chip in PIC_CHIPS:
+        if not quiere(chip):
+            continue
         info = usadas[chip]
         try:
             renglones = asignar_pines(circuito, info)
@@ -104,13 +166,22 @@ def armar(tabla, forma="auto", pines=None):
                           f"terminos) y el {info['titulo']} tiene {info['palabras']}; "
                           "usa uno con mas memoria")
             continue
-        ruta = f"pic/{chip}.c"
-        kit.archivos[ruta] = micros.pic(circuito, chip, renglones)
+        rutas = []
+        lenguajes = ajustes.lenguajes_pic(valores(chip)) if chip in ajustes.AJUSTES else ("c",)
+        if "c" in lenguajes:
+            rutas.append(f"pic/{chip}.c")
+            kit.archivos[rutas[-1]] = micros.pic(circuito, chip, renglones, valores(chip))
+        if "asm" in lenguajes:
+            rutas.append(f"pic/{chip}.S")
+            kit.archivos[rutas[-1]] = asm.pic18_combinacional(circuito, chip, renglones,
+                                                              valores(chip))
         kit.pines[info["titulo"]] = renglones
-        kit.listo(info["titulo"], ruta)
+        kit.listo(info["titulo"], *rutas)
 
     # --- ESP32: el mismo reparto para Arduino y MicroPython
     for variante in ESP32_VARIANTES:
+        if not quiere(variante):
+            continue
         info = usadas[variante]
         try:
             renglones = asignar_pines(circuito, info)
@@ -124,90 +195,135 @@ def armar(tabla, forma="auto", pines=None):
         kit.pines[info["titulo"]] = renglones
         kit.listo(info["titulo"], ino, py)
 
-    # --- Arduino: el Uno si cabe; si no, el Mega
-    uno, mega = usadas["uno_nano"], usadas["mega2560"]
-    try:
-        renglones = asignar_pines(circuito, uno)
-        ruta = "arduino/uno_nano/uno_nano.ino"
-        kit.archivos[ruta] = micros.avr(circuito, "uno_nano", renglones)
-        kit.pines[uno["titulo"]] = renglones
-        kit.listo(uno["titulo"], ruta)
-    except Bloqueo as b:
-        kit.bloqueado(uno["titulo"], f"{b}; se genera para el Mega")
+    # --- Arduino. Con todas las placas (la CLI): el Uno si cabe; si no, el
+    # Mega. Elegidas en la ventana: cada una por su lado.
+    for variante in ("uno_nano", "mega2560"):
+        if elegidas is None and variante == "mega2560":
+            continue
+        if not quiere(variante):
+            continue
+        info = usadas[variante]
         try:
-            renglones = asignar_pines(circuito, mega)
-            ruta = "arduino/mega2560/mega2560.ino"
-            kit.archivos[ruta] = micros.avr(circuito, "mega2560", renglones)
-            kit.pines[mega["titulo"]] = renglones
-            kit.listo(mega["titulo"], ruta)
-        except Bloqueo as b2:
-            kit.bloqueado(mega["titulo"], str(b2))
-
-    # --- Blue Pill
-    info = usadas["bluepill"]
-    try:
-        renglones = asignar_pines(circuito, info)
-        ruta = "stm32/bluepill/bluepill.ino"
-        kit.archivos[ruta] = micros.bluepill(circuito, renglones)
+            renglones = asignar_pines(circuito, info)
+        except Bloqueo as b:
+            if elegidas is None:   # el Mega de respaldo
+                kit.bloqueado(info["titulo"], f"{b}; se genera para el Mega")
+                _arduino(kit, circuito, "mega2560", usadas["mega2560"], valores("mega2560"))
+            else:
+                kit.bloqueado(info["titulo"], str(b))
+            continue
+        ruta = f"arduino/{variante}/{variante}.ino"
+        kit.archivos[ruta] = micros.avr(circuito, variante, renglones, valores(variante))
         kit.pines[info["titulo"]] = renglones
         kit.listo(info["titulo"], ruta)
-    except Bloqueo as b:
-        kit.bloqueado(info["titulo"], str(b))
+
+    # --- Blue Pill
+    if quiere("bluepill"):
+        info = usadas["bluepill"]
+        try:
+            renglones = asignar_pines(circuito, info)
+            ruta = "stm32/bluepill/bluepill.ino"
+            kit.archivos[ruta] = micros.bluepill(circuito, renglones)
+            kit.pines[info["titulo"]] = renglones
+            kit.listo(info["titulo"], ruta)
+        except Bloqueo as b:
+            kit.bloqueado(info["titulo"], str(b))
 
     # --- Pico
-    info = usadas["pico"]
-    try:
-        renglones = asignar_pines(circuito, info)
-        kit.archivos["pico/main.py"] = micros.pico(circuito, renglones)
-        kit.pines[info["titulo"]] = renglones
-        kit.listo(info["titulo"], "pico/main.py")
-    except Bloqueo as b:
-        kit.bloqueado(info["titulo"], str(b))
+    if quiere("pico"):
+        info = usadas["pico"]
+        try:
+            renglones = asignar_pines(circuito, info)
+            kit.archivos["pico/main.py"] = micros.pico(circuito, renglones)
+            kit.pines[info["titulo"]] = renglones
+            kit.listo(info["titulo"], "pico/main.py")
+        except Bloqueo as b:
+            kit.bloqueado(info["titulo"], str(b))
 
-    # --- HDL: no depende de pines, siempre sale
+    # --- HDL: no depende de pines. La MAX II lo necesita, asi que sale con ella.
     n = circuito.nombre
-    kit.archivos[f"fpga/{n}.vhd"] = logica.vhdl(circuito)
-    kit.archivos[f"fpga/{n}.v"] = logica.verilog(circuito)
-    kit.archivos[f"fpga/tb_{n}.vhd"] = logica.vhdl_testbench(circuito)
-    kit.archivos[f"fpga/tb_{n}.v"] = logica.verilog_testbench(circuito)
-    kit.listo("VHDL y Verilog (con bancos de prueba)", f"fpga/{n}.vhd", f"fpga/{n}.v",
-              f"fpga/tb_{n}.vhd", f"fpga/tb_{n}.v")
-    info = usadas["max2"]
-    try:
-        renglones = asignar_pines(circuito, info)
-        # Con los topes de ktool (6 entradas, 32 salidas) son a lo mas 160 de
-        # 240 celdas: hoy nunca se bloquea por tamano. Se revisa igual, por si
-        # algun dia suben los topes.
-        if logica.celdas_max_ii(circuito) > 240:
-            raise Bloqueo(f"pide hasta {logica.celdas_max_ii(circuito)} celdas logicas y "
-                          "la EPM240 tiene 240")
-        kit.archivos[f"fpga/{n}.qsf"] = logica.qsf(circuito, renglones)
-        kit.archivos[f"fpga/{n}.qpf"] = logica.qpf(circuito)
-        kit.pines[info["titulo"]] = renglones
-        kit.listo(info["titulo"], f"fpga/{n}.qpf", f"fpga/{n}.qsf")
-    except Bloqueo as b:
-        kit.bloqueado(info["titulo"], str(b))
+    if quiere("hdl") or quiere("max2"):
+        kit.archivos[f"fpga/{n}.vhd"] = logica.vhdl(circuito)
+        kit.archivos[f"fpga/tb_{n}.vhd"] = logica.vhdl_testbench(circuito)
+        rutas = [f"fpga/{n}.vhd", f"fpga/tb_{n}.vhd"]
+        if quiere("hdl"):
+            kit.archivos[f"fpga/{n}.v"] = logica.verilog(circuito)
+            kit.archivos[f"fpga/tb_{n}.v"] = logica.verilog_testbench(circuito)
+            rutas += [f"fpga/{n}.v", f"fpga/tb_{n}.v"]
+            kit.listo(TITULO_PLATAFORMA["hdl"], *rutas)
+    if quiere("max2"):
+        info = usadas["max2"]
+        try:
+            renglones = asignar_pines(circuito, info)
+            # Con los topes de ktool (6 entradas, 32 salidas) son a lo mas 160 de
+            # 240 celdas: hoy nunca se bloquea por tamano. Se revisa igual, por si
+            # algun dia suben los topes.
+            if logica.celdas_max_ii(circuito) > 240:
+                raise Bloqueo(f"pide hasta {logica.celdas_max_ii(circuito)} celdas logicas y "
+                              "la EPM240 tiene 240")
+            rutas = [f"fpga/{n}.qpf", f"fpga/{n}.qsf"]
+            envoltura = logica.vhdl_max2(circuito, valores("max2"))
+            if envoltura is not None:
+                rutas.append(f"fpga/{logica.nombre_max2(circuito)}.vhd")
+                kit.archivos[rutas[-1]] = envoltura
+            kit.archivos[f"fpga/{n}.qsf"] = logica.qsf(circuito, renglones, valores("max2"))
+            kit.archivos[f"fpga/{n}.qpf"] = logica.qpf(circuito)
+            kit.pines[info["titulo"]] = renglones
+            if not quiere("hdl"):
+                rutas = [f"fpga/{n}.vhd", f"fpga/tb_{n}.vhd"] + rutas
+            kit.listo(info["titulo"], *rutas)
+        except Bloqueo as b:
+            kit.bloqueado(info["titulo"], str(b))
 
     # --- GAL22V10
-    try:
-        kit.archivos["gal/CIRCUITO.PLD"] = logica.gal22v10(circuito)
-        kit.listo(placas.GAL22V10["titulo"], "gal/CIRCUITO.PLD")
-    except Bloqueo as b:
-        kit.bloqueado(placas.GAL22V10["titulo"], str(b))
+    if quiere("gal22v10"):
+        try:
+            kit.archivos["gal/CIRCUITO.PLD"] = logica.gal22v10(circuito)
+            kit.listo(placas.GAL22V10["titulo"], "gal/CIRCUITO.PLD")
+        except Bloqueo as b:
+            kit.bloqueado(placas.GAL22V10["titulo"], str(b))
 
     # --- TTL
-    try:
-        kit.archivos["ttl/MATERIALES.md"] = logica.ttl(circuito)
-        kit.listo("Logica discreta 74LS", "ttl/MATERIALES.md")
-    except Bloqueo as b:
-        kit.bloqueado("Logica discreta 74LS", str(b))
+    if quiere("ttl"):
+        try:
+            kit.archivos["ttl/MATERIALES.md"] = logica.ttl(circuito)
+            kit.listo("Logica discreta 74LS", "ttl/MATERIALES.md")
+        except Bloqueo as b:
+            kit.bloqueado("Logica discreta 74LS", str(b))
 
     # --- Python
-    kit.archivos["python/simular.py"] = logica.simulacion_python(circuito)
-    kit.listo("Simulacion en Python", "python/simular.py")
+    if quiere("python"):
+        kit.archivos["python/simular.py"] = logica.simulacion_python(circuito)
+        kit.listo("Simulacion en Python", "python/simular.py")
 
+    _aplicar_editados(kit, editados)
     kit.archivos["LEEME.md"] = _leeme(circuito, kit.resumen)
     return kit
+
+
+def _arduino(kit, circuito, variante, info, valores):
+    """El sketch de una placa Arduino, o su motivo de bloqueo."""
+    try:
+        renglones = asignar_pines(circuito, info)
+    except Bloqueo as b:
+        kit.bloqueado(info["titulo"], str(b))
+        return
+    ruta = f"arduino/{variante}/{variante}.ino"
+    kit.archivos[ruta] = micros.avr(circuito, variante, renglones, valores)
+    kit.pines[info["titulo"]] = renglones
+    kit.listo(info["titulo"], ruta)
+
+
+def _aplicar_editados(kit, editados):
+    """Los archivos corregidos a mano en la vista previa sustituyen al generado.
+
+    Solo si la ruta sigue existiendo: si el circuito cambio tanto que ese
+    archivo ya no sale (otra placa, otro nombre), la edicion vieja no se cuela.
+    """
+    for ruta, texto in (editados or {}).items():
+        if ruta in kit.archivos:
+            kit.archivos[ruta] = texto
+            kit.editados.add(ruta)
 
 
 def escribir(kit, carpeta):
