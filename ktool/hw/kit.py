@@ -34,10 +34,52 @@ PIC_CHIPS = ["pic18f4550", "pic18f45k50", "pic16f877a", "pic16f628a", "pic16f84a
 ESP32_VARIANTES = ["esp32_wroom32", "esp32_s3", "esp32_c3"]
 
 
-def generar(tabla, carpeta, forma="auto"):
+def max2_con_pines(circuito, pines):
+    """La EPM240 con las patas que pide el usuario: primero las entradas, en
+    orden, y luego las salidas.
+
+    Sirve para las placas de practica, que traen LEDs y botones en patas fijas.
+    Cada pata se revisa contra la tabla oficial de Intel: una de VCC, GND o
+    JTAG no se acepta (ahi no hay donde conectar una senal). Lanza ValueError
+    con el motivo.
+    """
+    validas = set(placas.EPM240_BANCO_1) | set(placas.EPM240_BANCO_2)
+    especiales = {12: "GCLK0", 14: "GCLK1", 62: "GCLK2", 64: "GCLK3",
+                  43: "DEV_OE", 44: "DEV_CLRn"}
+    for p in pines:
+        if p in especiales:
+            raise ValueError(
+                f"la pata {p} es {especiales[p]}: sirve de I/O, pero ktool la deja libre "
+                "para los relojes y el reset. Usa otra")
+        if p not in validas:
+            raise ValueError(
+                f"la pata {p} de la EPM240T100 no es de I/O de usuario (es de "
+                "alimentacion, tierra o JTAG). Las validas son: "
+                + ", ".join(str(x) for x in sorted(validas)))
+    if len(set(pines)) != len(pines):
+        raise ValueError("--max2-pines repite una pata")
+    ne, ns = circuito.n_entradas, circuito.n_salidas
+    if len(pines) != ne + ns:
+        raise ValueError(
+            f"--max2-pines trae {len(pines)} patas y el circuito tiene {ne} entradas "
+            f"({', '.join(circuito.entradas)}) y {ns} salidas ({', '.join(circuito.salidas)}): "
+            f"hacen falta {ne + ns}, primero las entradas")
+    placa = dict(placas.EPM240)
+    placa["entradas"] = list(pines[:ne])
+    placa["salidas"] = list(pines[ne:])
+    return placa
+
+
+def generar(tabla, carpeta, forma="auto", pines_max2=None):
     """Escribe el kit en `carpeta` y devuelve el resumen como lista de
-    (plataforma, estado, detalle). `estado` es 'listo' o 'bloqueado'."""
+    (plataforma, estado, detalle). `estado` es 'listo' o 'bloqueado'.
+
+    `pines_max2`: lista opcional de patas de la EPM240 (ver max2_con_pines).
+    """
     circuito = Circuito(tabla, forma)
+    placa_max2 = placas.EPM240
+    if pines_max2:
+        placa_max2 = max2_con_pines(circuito, pines_max2)
     archivos = {}   # ruta relativa -> texto
     resumen = []
 
@@ -122,7 +164,7 @@ def generar(tabla, carpeta, forma="auto"):
     listo("VHDL y Verilog (con bancos de prueba)", f"fpga/{n}.vhd", f"fpga/{n}.v",
           f"fpga/tb_{n}.vhd", f"fpga/tb_{n}.v")
     try:
-        renglones = asignar_pines(circuito, placas.EPM240)
+        renglones = asignar_pines(circuito, placa_max2)
         # Con los topes de ktool (6 entradas, 32 salidas) son a lo mas 160 de
         # 240 celdas: hoy nunca se bloquea por tamano. Se revisa igual, por si
         # algun dia suben los topes.

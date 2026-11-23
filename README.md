@@ -126,6 +126,7 @@ ktool -h                                  # full help
 | `--gates-only` | Gates only (turns off K-map and table). |
 | `--text` | Just print the equations to the terminal. |
 | `--hw folder` | Write the [hardware kit](#hardware-kit): the circuit as code for every board below. |
+| `--max2-pines 26,28,33` | With `--hw`: which MAX II pins to use, inputs first. For boards with LEDs or buttons on fixed pins. |
 | `--out file.html` / `--open` / `--title "..."` | Where the document goes, whether to open it, and its title. |
 
 ### Expression syntax
@@ -256,7 +257,7 @@ ktool -n 4 -m 0,1,2,5 --form nand --hw kit_nand    # the form you ask for
 | **STM32** Blue Pill | A sketch for STM32duino. The inputs sit on 5 V-tolerant pins. |
 | **Raspberry Pi Pico** | MicroPython with the internal pull-downs on. |
 | **VHDL and Verilog** | Synthesisable sources, and a **test bench in each** that sweeps every input combination against the truth table. |
-| **MAX II EPM240T100C5** | A Quartus Prime project (`.qpf` + `.qsf`) with user I/O pins only. |
+| **MAX II EPM240T100C5** | A Quartus Prime project (`.qpf` + `.qsf`) with user I/O pins only. `--max2-pines` puts each signal on the pin your board needs, and refuses power, ground and JTAG pins. |
 | **GAL22V10** | A WinCUPL `.pld`, with each output placed in a macrocell big enough for its product terms. |
 | **74LS chips** | The bill of materials ("1× 74LS00, 2 gates used of 4") and every jumper, pin to pin. |
 | **Python** | A standalone script that prints the truth table of the equations and checks it against yours. |

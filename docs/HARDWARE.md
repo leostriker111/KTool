@@ -152,6 +152,11 @@ El VHDL es lo que Quartus compila para la EPM240, así que tiene su propia pasad
   un corto. El `.qsf` pone `RESERVE_ALL_UNUSED_PINS "AS INPUT TRI-STATED"`.
 - **3.3 V.** Las patas de la MAX II no aguantan 5 V directo; el `.qsf` lo
   advierte y dice cómo bajar el nivel si la señal viene de un chip TTL.
+- **Las patas de tu placa.** Las placas de práctica traen LEDs y botones en
+  patas fijas, así que `--max2-pines 26,28,33,...` pone cada señal donde haga
+  falta (primero las entradas, luego las salidas). Cada pata se revisa contra la
+  tabla de Intel: VCC, GND y JTAG se rechazan con el motivo, y las GCLK, DEV_OE y
+  DEV_CLRn también, para dejarlas libres.
 
 Las asignaciones del `.qsf` no se pudieron leer del manual de Intel (sus páginas
 redirigen a un 404), así que se confirmaron contra archivos que escribió el

@@ -112,6 +112,10 @@ def _build_parser():
                    help="generar el kit de hardware en CARPETA: codigo para PIC, ESP32, "
                         "Arduino, STM32, Pico, VHDL/Verilog con banco de prueba, MAX II, "
                         "GAL22V10, chips 74LS y una simulacion en Python")
+    p.add_argument("--max2-pines", metavar="LISTA",
+                   help="con --hw: las patas de la MAX II EPM240 en que va cada senal, "
+                        "primero las entradas y luego las salidas (ej: 26,28,33,73). "
+                        "Para placas que traen LEDs o botones en patas fijas")
     p.add_argument("--text", action="store_true", help="solo imprimir ecuaciones en la terminal")
     p.add_argument("--out", help="ruta del documento HTML a generar")
     p.add_argument("--open", action="store_true", help="abrir el documento en el navegador")
@@ -180,11 +184,17 @@ def _print_text(table):
                 print(f"  {d['term']:<14} -> {', '.join(d['outputs'])}")
 
 
-def _generar_kit(table, carpeta, forma):
+def _generar_kit(table, carpeta, forma, pines_max2=None):
     """Escribe el kit y dice, plataforma por plataforma, que salio y que no."""
     from .hw import kit
+    pines = None
+    if pines_max2:
+        try:
+            pines = [int(p) for p in pines_max2.replace(",", " ").split()]
+        except ValueError:
+            raise SystemExit(f"--max2-pines lleva numeros de pata, ej. 26,28,33: {pines_max2!r}")
     try:
-        resumen = kit.generar(table, carpeta, forma)
+        resumen = kit.generar(table, carpeta, forma, pines)
     except ValueError as e:
         raise SystemExit(str(e))
     print(f"kit de hardware en: {carpeta}")
@@ -232,8 +242,10 @@ def main(argv=None):
         raise SystemExit(str(e))
 
     if args.hw:
-        _generar_kit(table, args.hw, args.form)
+        _generar_kit(table, args.hw, args.form, args.max2_pines)
         return
+    if args.max2_pines:
+        raise SystemExit("--max2-pines va junto con --hw")
 
     if args.text:
         _print_text(table)

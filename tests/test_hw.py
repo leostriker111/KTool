@@ -241,6 +241,26 @@ class Pines(unittest.TestCase):
             self.assertNotIn(pin, placas.ESP32["esp32_wroom32"]["entradas"])
             self.assertNotIn(pin, placas.ESP32["esp32_wroom32"]["salidas"])
 
+    def test_max2_con_las_patas_del_usuario(self):
+        tabla = TruthTable(2, outputs={"Y_AND": [0, 0, 0, 1], "Y_OR": [0, 1, 1, 1]})
+        with tempfile.TemporaryDirectory() as d:
+            kit.generar(tabla, d, pines_max2=[26, 28, 81, 77])
+            with open(os.path.join(d, "fpga", "circuito.qsf"), encoding="utf-8") as f:
+                texto = f.read()
+        for linea in ("PIN_26 -to A", "PIN_28 -to B", "PIN_81 -to Y_AND", "PIN_77 -to Y_OR"):
+            self.assertIn("set_location_assignment " + linea, texto)
+
+    def test_max2_rechaza_patas_que_no_son_de_usuario(self):
+        c = Circuito(TruthTable(2, outputs={"Y": [0, 1, 1, 0]}))
+        for malas, motivo in (([26, 28, 9], "alimentacion"),      # VCCIO1
+                              ([26, 28, 22], "JTAG"),             # TMS
+                              ([26, 28, 12], "GCLK0"),
+                              ([26, 26, 33], "repite"),
+                              ([26, 28], "hacen falta 3")):
+            with self.assertRaises(ValueError) as e:
+                kit.max2_con_pines(c, malas)
+            self.assertIn(motivo, str(e.exception), malas)
+
     def test_la_max_ii_solo_usa_io_de_usuario(self):
         no_io = {9, 10, 11, 12, 13, 14, 22, 23, 24, 25, 31, 32, 43, 44, 45, 46,
                  59, 60, 62, 63, 64, 65, 79, 80, 93, 94}

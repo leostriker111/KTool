@@ -129,6 +129,7 @@ ktool -h                                  # ayuda completa
 | `--gates-only` | Sólo compuertas (apaga K-map y tabla). |
 | `--text` | Sólo imprime las ecuaciones en la terminal. |
 | `--hw carpeta` | Escribe el [kit de hardware](#kit-de-hardware): el circuito como código para cada placa de abajo. |
+| `--max2-pines 26,28,33` | Con `--hw`: en qué patas de la MAX II va cada señal, primero las entradas. Para placas con LEDs o botones en patas fijas. |
 | `--out archivo.html` / `--open` / `--title "..."` | Dónde va el documento, si se abre, y su título. |
 
 ### Sintaxis de expresiones
@@ -261,7 +262,7 @@ ktool -n 4 -m 0,1,2,5 --form nand --hw kit_nand    # en la forma que pidas
 | **STM32** Blue Pill | Un sketch para STM32duino. Las entradas van en pines tolerantes a 5 V. |
 | **Raspberry Pi Pico** | MicroPython con los pull-down internos puestos. |
 | **VHDL y Verilog** | Fuentes sintetizables, y **un banco de prueba en cada uno** que recorre todas las combinaciones contra la tabla de verdad. |
-| **MAX II EPM240T100C5** | Un proyecto de Quartus Prime (`.qpf` + `.qsf`) solo con pines de I/O de usuario. |
+| **MAX II EPM240T100C5** | Un proyecto de Quartus Prime (`.qpf` + `.qsf`) solo con pines de I/O de usuario. `--max2-pines` pone cada señal en la pata que tu placa necesita, y rechaza las de alimentación, tierra y JTAG. |
 | **GAL22V10** | Un `.pld` de WinCUPL, con cada salida en una macrocelda con lugar para sus términos producto. |
 | **Chips 74LS** | La lista de materiales («1× 74LS00, 2 compuertas usadas de 4») y cada cable, pata por pata. |
 | **Python** | Un script autónomo que imprime la tabla de verdad de las ecuaciones y la compara con la tuya. |

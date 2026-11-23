@@ -10,7 +10,8 @@
   simulacion en Python. Cada archivo trae su tabla de pines; una placa que no alcanza (por
   pines, por memoria o por macroceldas) se bloquea con la cuenta exacta en vez de recibir
   codigo roto. Solo combinacionales: las maquinas de estado llegan con el Release 3.
-  Diseno y verificacion en `docs/HARDWARE.md`.
+  Diseno y verificacion en `docs/HARDWARE.md`. `--max2-pines` acomoda las senales en las
+  patas de la MAX II que traiga cada placa.
 
 ## 0.4.1
 
