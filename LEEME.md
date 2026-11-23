@@ -431,7 +431,7 @@ archivo HTML y no un PDF renderizado.
 
 ### Los módulos
 
-Unas 2,400 líneas, repartidas por trabajo.
+Unas 16,000 líneas, repartidas por trabajo.
 
 <details open>
 <summary><b>core — las matemáticas</b></summary>
@@ -472,7 +472,13 @@ Unas 2,400 líneas, repartidas por trabajo.
 | módulo | líneas | qué hace |
 |---|--:|---|
 | `gui/app.py` | 680 | La ventana y la tabla tipo hoja de cálculo. |
-| `gui/displays.py` | 89 | Mostrar los resultados en el panel de abajo. |
+| `gui/displays.py` | 162 | Los displays de 7, 14 y 16 segmentos, la barra de 10 LEDs y el LED, encendidos por la fila activa. |
+| `gui/resultados.py` | 497 | El panel de Resultados: ecuaciones, portada, Generar, protoboard y el resumen del kit. |
+| `gui/kit_ventana.py` | 391 | La ventana del kit: plataformas, pines, ajustes y la vista previa editable. |
+| `gui/pin_planner.py` | 531 | El planificador de pines sobre el dibujo del componente. |
+| `gui/calculadora.py` | 291 | La calculadora de frecuencia, con la onda y el código por hardware. |
+| `gui/texto_segmentos.py` | 141 | Un mensaje convertido en tabla para un display. |
+| `gui/fsm_view.py` | 515 | El editor de máquinas de estado. |
 | `cli.py` | 134 | Los argumentos y la tubería. |
 | `theme.py` | 23 | Los colores que comparten la ventana y el reporte. |
 
@@ -489,7 +495,15 @@ Unas 2,400 líneas, repartidas por trabajo.
 | `hw/modelo.py` | 250 | El circuito resuelto, la ecuación escrita con *todos* los paréntesis (C, Python, VHDL y Verilog ordenan los operadores distinto) y el reparto de pines que bloquea con la cuenta exacta. |
 | `hw/micros.py` | 413 | PIC, ESP32, Arduino, Blue Pill y Pico. En el PIC cada término es una comparación de máscara de bits, y así el circuito cabe en las 1K palabras de un 16F84A. |
 | `hw/logica.py` | 502 | VHDL, Verilog, los dos bancos de prueba, los archivos de Quartus, la GAL22V10, la lista de materiales 74LS (reusa el netlist del protoboard) y la simulación en Python. |
-| `hw/kit.py` | 197 | Escribe la carpeta y el resumen de qué se generó y qué se bloqueó. |
+| `hw/kit.py` | 326 | Arma el kit de las plataformas elegidas y el resumen de qué se generó y qué se bloqueó. |
+| `hw/ajustes.py` | 173 | Los ajustes de cada placa (oscilador, polaridad, reloj, frecuencia), solo los que el generador respeta. |
+| `hw/configuracion.py` | 114 | Placas, pines, ajustes y archivos editados: lo que leen la ventana, el kit y el documento. |
+| `hw/encapsulados.py` | 1282 | El dibujo de cada componente (DIP, TQFP-100, cabezales de cada placa), con la fuente de cada pinout. |
+| `hw/asm.py` | 451 | El PIC 18F en ensamblador para pic-as, combinacional y de máquinas de estado. |
+| `hw/reloj.py` | 957 | Divisores de frecuencia, el 555 y los retardos en VHDL, C, ensamblador y Arduino. |
+| `hw/vhdl_fsm.py` | 326 | Las máquinas de estado en VHDL por los tres métodos, con su banco de prueba. |
+| `hw/kit_fsm.py` | 1176 | El kit de las máquinas de estado: PIC en C y ensamblador, Arduino y la MAX II con su divisor. |
+| `segmentos.py` | 533 | Las tipografías de 7, 14 y 16 segmentos y el texto convertido en tabla. |
 
 </details>
 
