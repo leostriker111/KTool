@@ -1,6 +1,6 @@
 # Cambios
 
-## Sin publicar
+## 0.5.0
 
 - Fase 5, kit de hardware redisenado: *Armado > Kit de hardware* abre una ventana con las
   plataformas a generar (columna Usar), un **planificador de pines** que dibuja el componente

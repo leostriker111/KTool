@@ -35,6 +35,12 @@ jobs:
           Set-Location $env:RUNNER_TEMP
           & "$env:GITHUB_WORKSPACE\dist\ktool.exe" -h
           if ($LASTEXITCODE -ne 0) { throw "ktool.exe no arranca fuera del repo" }
+          # el kit y el reloj importan modulos que -h no toca (hw/asm, hw/reloj...)
+          & "$env:GITHUB_WORKSPACE\dist\ktool.exe" reloj --entrada 50M --salida 1
+          if ($LASTEXITCODE -ne 0) { throw "ktool.exe reloj fallo" }
+          & "$env:GITHUB_WORKSPACE\dist\ktool.exe" -e "A'B + C" --hw kit
+          if ($LASTEXITCODE -ne 0) { throw "ktool.exe --hw fallo" }
+          if (-not (Test-Path "kit\pic\pic18f45k50.S")) { throw "el kit no trae el ensamblador" }
 
       - name: Instalar Inno Setup
         run: choco install innosetup --no-progress -y

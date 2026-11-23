@@ -4,7 +4,7 @@
 ; `kmap` queda como alias historico: un .cmd de una linea que llama a ktool.exe.
 
 #define MyAppName "ktool"
-#define MyAppVersion "0.4.1"
+#define MyAppVersion "0.5.0"
 #define MyAppPublisher "Leostriker"
 #define MyAppURL "https://github.com/leostriker111/ktool"
 
