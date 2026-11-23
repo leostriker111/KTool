@@ -113,7 +113,7 @@ paridades de 6 variables en NAND. Cada archivo pasó por la herramienta real:
 |---|---|---|
 | 88 archivos `.c` de PIC (los 5 chips) | MPLAB XC8 v3.10, `-O1`, con los DFP de MPLAB X 6.25 | 88 compilan, sin una advertencia. Los que no caben ya venían bloqueados. |
 | 21 sketches de Uno o Mega | `arduino-cli` 1.6 con `arduino:avr` 1.8.8, `--warnings all` | 21 compilan, sin advertencias en el código generado. |
-| sketches de ESP32 (WROOM-32, S3, C3) y Blue Pill | `arduino-cli` con `esp32:esp32` 4.0.0 y `STMicroelectronics:stm32` 3.1.0 | pendiente: se agrega al terminar de compilar |
+| sketches de ESP32 (WROOM-32, S3, C3) y Blue Pill | `arduino-cli` con `esp32:esp32` 4.0.0 y `STMicroelectronics:stm32` 3.1.0 | 31 compilan (8 circuitos variados en las 4 placas; el C3 bloqueado en el de 16 pines), sin advertencias en el código generado. |
 | 21 bancos de prueba VHDL | GHDL 6.0.0 | 21 recorren todas las combinaciones y coinciden con la tabla. |
 | 21 bancos de prueba Verilog | Icarus Verilog 12.0 (`-Wall`) | 21 coinciden, sin advertencias. |
 | 21 `simular.py` | Python 3.12 | 21 coinciden con la tabla. |
