@@ -1,0 +1,21 @@
+{
+  "name": "Letrero giratorio: t-o-o-l",
+  "kind": "moore",
+  "inputs": [],
+  "state_bits": ["Q2", "Q1", "Q0"],
+  "outputs": ["a", "b", "c", "d", "e", "f", "g"],
+  "states": [
+    { "name": "L0", "code": "000", "label": "t", "out": "0001111" },
+    { "name": "L1", "code": "001", "label": "o", "out": "0011101" },
+    { "name": "L2", "code": "010", "label": "o", "out": "0011101" },
+    { "name": "L3", "code": "011", "label": "l", "out": "0001110" },
+    { "name": "L4", "code": "100", "label": "_", "out": "0000000" }
+  ],
+  "transitions": [
+    { "from": "L0", "in": "", "to": "L1" },
+    { "from": "L1", "in": "", "to": "L2" },
+    { "from": "L2", "in": "", "to": "L3" },
+    { "from": "L3", "in": "", "to": "L4" },
+    { "from": "L4", "in": "", "to": "L0" }
+  ]
+}

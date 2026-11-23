@@ -304,7 +304,7 @@ _INTERNA_EXTERNA = {
 }
 
 
-def build_shared_circuit(named_sols, forma="sop"):
+def build_shared_circuit(named_sols, forma="sop", var_order=None):
     """Circuito combinado de todas las salidas, compartiendo las compuertas
     de termino que se repiten.
 
@@ -312,6 +312,8 @@ def build_shared_circuit(named_sols, forma="sop"):
     `forma` dice con que compuertas se arma: sop (AND-OR), pos (OR-AND),
     nand o nor. Tiene que ser la MISMA que la de las soluciones, o el dibujo
     dice una cosa y las ecuaciones otra.
+    `var_order`: el orden de los rieles (en una maquina de estados, primero los
+    Q y luego las entradas). Sin el, van en orden alfabetico.
 
     Devuelve (svg, gates) donde gates = [{'id','term','outputs'}].
     """
@@ -355,7 +357,12 @@ def build_shared_circuit(named_sols, forma="sop"):
             inputs.append(("gate", gi))
         out_plan.append((name, inputs, None))
 
-    rails.sort(key=lambda lit: (lit.rstrip("'"), lit.endswith("'")))
+    if var_order:
+        posicion = {v: i for i, v in enumerate(var_order)}
+        rails.sort(key=lambda lit: (posicion.get(lit.rstrip("'"), len(posicion)),
+                                    lit.endswith("'")))
+    else:
+        rails.sort(key=lambda lit: (lit.rstrip("'"), lit.endswith("'")))
 
     rail_gap, x0, top, gate_w, or_gate_w = 26, 16, 46, 46, 46
     rail_x = {lit: x0 + i * rail_gap for i, lit in enumerate(rails)}
@@ -519,3 +526,55 @@ def build_shared_circuit(named_sols, forma="sop"):
         for i, g in enumerate(gate_terms)
     ]
     return "\n".join(s), gates
+
+
+def flipflop_bank_svg(state_bits, ff_inputs):
+    """Banco de flip-flops como cajas. ff_inputs = letras del flip-flop (['T'],
+    ['D'], ['J','K'], ['S','R']); cada caja muestra sus entradas (etiquetadas con
+    la senal que las alimenta, p.ej. T2), el reloj comun y la salida Q."""
+    n = len(state_bits)
+    npins = len(ff_inputs)
+    box_w = 92
+    box_h = max(56, npins * 26 + 22)
+    gap = 30
+    x = 150
+    top = 40
+    width = x + box_w + 150
+    height = top + n * (box_h + gap) + 16
+    clk_x = x - 34
+
+    def _digits(name, fb):
+        d = "".join(c for c in name if c.isdigit())
+        return d or str(fb)
+
+    s = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
+         f'font-family="Georgia, serif">']
+    clk_ys = []
+    for i, q in enumerate(state_bits):
+        y = top + i * (box_h + gap)
+        suf = _digits(q, n - 1 - i)
+        s.append(f'<rect x="{x}" y="{y}" width="{box_w}" height="{box_h}" rx="6" '
+                 f'fill="#eef4ff" stroke="#33518f" stroke-width="2"/>')
+        s.append(f'<text x="{x + box_w/2:.0f}" y="{y + box_h/2 + 5:.0f}" font-size="13" '
+                 f'text-anchor="middle" fill="#33518f">{_esc("".join(ff_inputs))}</text>')
+        for k, ltr in enumerate(ff_inputs):
+            iy = y + box_h * (k + 1) / (npins + 1)
+            sig = f"{ltr}{suf}"
+            s.append(f'<line x1="{x - 46}" y1="{iy:.1f}" x2="{x}" y2="{iy:.1f}" stroke="#000" stroke-width="1.5"/>')
+            s.append(f'<text x="{x - 50}" y="{iy + 4:.1f}" font-size="12" text-anchor="end">{_esc(sig)}</text>')
+            s.append(f'<text x="{x + 6}" y="{iy + 4:.1f}" font-size="11" fill="#888">{_esc(ltr)}</text>')
+        # reloj (notch triangular abajo-izquierda)
+        cy = y + box_h - 12
+        s.append(f'<polyline points="{x},{cy-6} {x+9},{cy} {x},{cy+6}" fill="none" stroke="#000" stroke-width="1.3"/>')
+        s.append(f'<line x1="{clk_x}" y1="{cy}" x2="{x}" y2="{cy}" stroke="#000" stroke-width="1.3"/>')
+        clk_ys.append(cy)
+        # salida Q
+        oy = y + box_h * 0.34
+        s.append(f'<line x1="{x + box_w}" y1="{oy:.1f}" x2="{x + box_w + 44}" y2="{oy:.1f}" stroke="#000" stroke-width="1.5"/>')
+        s.append(f'<text x="{x + box_w + 50}" y="{oy + 5:.1f}" font-size="14" font-weight="bold" fill="#1a2a52">{_esc(q)}</text>')
+    # linea de reloj comun
+    if clk_ys:
+        s.append(f'<line x1="{clk_x}" y1="{min(clk_ys)}" x2="{clk_x}" y2="{max(clk_ys)}" stroke="#000" stroke-width="1.3"/>')
+        s.append(f'<text x="{clk_x - 4}" y="{min(clk_ys) - 6}" font-size="12" text-anchor="end">CLK</text>')
+    s.append("</svg>")
+    return "\n".join(s)

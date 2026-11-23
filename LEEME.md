@@ -72,6 +72,7 @@ confirma la salida antes de construir algo encima.
 - [Cómo se usa (GUI)](#cómo-se-usa-gui)
 - [Qué sale](#qué-sale) · [Armado en protoboard](#armado-en-protoboard-beta) *(beta)*
 - [Kit de hardware](#kit-de-hardware) — el mismo circuito para PIC, ESP32, Arduino, FPGA, GAL y 74LS
+- [Máquinas de estado y contadores](#máquinas-de-estado-y-contadores) — D, JK, T y SR, VHDL por tres métodos
 - [Limitaciones conocidas](#limitaciones-conocidas)
 - [Para quien quiera meter mano](#contribuir)
 
@@ -323,8 +324,45 @@ no solo la MAX II, y la pestaña *Documento* puede meter el kit completo (tablas
 pines y cada archivo) dentro del HTML. Desde la terminal:
 `--pines max2=26,28,33 --pines uno_nano=2,3,8` y `--kit-en-documento`.
 
-Por ahora solo circuitos **combinacionales**. Las máquinas de estado, con reloj y
-reset, llegan con el Release 3.
+El kit de hardware es para circuitos **combinacionales**. Las máquinas de estado
+tienen su propia sección, abajo.
+
+## Máquinas de estado y contadores
+
+Máquinas síncronas Moore y Mealy, desde una tabla de estados y transiciones, y
+**contadores** descritos como los piden los enunciados de las prácticas:
+
+```powershell
+ktool contador --mod 13 --baja
+ktool contador --secuencia 4,7,2,6,0,3,5,1 --entradas X --modo 0=sigue --modo 1=paro
+ktool contador --entradas X,Y --modo 00=0-15 --modo 01=paro --modo 10=reinicio --modo 11=15,12,9,6,3,0 --ff JK --vhdl vhdl_mod16
+ktool fsm maquina.json --ff T
+```
+
+Cada modo es una lista (`4,7,2`), un rango (`0-15` sube, `12-0` baja), `paro` (se
+queda), `reinicio` (vuelve al primer número) o `set` (todos los flip-flops a 1). Si
+un modo arranca desde un número que no está en su lista, salta al primero de esa
+lista.
+
+El documento recorre todo el diseño: diagrama de estados, asignación de estados,
+tabla de estados, la tabla de transición y de **excitación para D, JK, T o SR**,
+cada entrada de flip-flop minimizada con su mapa de Karnaugh, el circuito con el
+banco de flip-flops, y el **VHDL por los tres métodos** de la práctica:
+*ecuaciones* (las ecuaciones de los flip-flops en un process con `rising_edge`),
+*tabla* (un `case` sobre estado y entradas) y *diagrama de estados* (un tipo con
+los estados por nombre). Los tres comparten la entidad, así que un mismo banco de
+prueba generado revisa cualquiera de ellos, ciclo por ciclo.
+
+En la ventana, el menú *Secuencial* abre el editor de máquinas (estados y
+transiciones en tablas, con el grafo en vivo) y un diálogo *Contador…*. *Archivo >
+Ejemplos > Contadores* trae ya armados los contadores de la práctica.
+
+**Cómo se comprobó.** Los 8 contadores de la práctica y 2 máquinas más, cada uno
+por los 3 métodos y con los 4 tipos de flip-flop: **60 simulaciones en GHDL** en
+VHDL-93 estricto, en todos los modos y con cambios de modo al azar, todas iguales
+a la simulación en Python; los tres métodos también pasan la síntesis de GHDL. Las
+pruebas revisan que las ecuaciones minimizadas de cada flip-flop, aplicadas con su
+ecuación característica, lleguen al estado siguiente correcto en cada transición.
 
 ## Limitaciones conocidas
 
@@ -340,7 +378,7 @@ Vale la pena decirlas claro, porque todo el chiste es ser confiable:
 - **El armado en protoboard está en beta**: verificado contra la tabla de
   verdad, pero sin armar en una mesa real, sin botones en la GUI, y enredado
   en circuitos grandes ([#8](https://github.com/leostriker111/KTool/issues/8)).
-- **El kit de hardware es solo combinacional**, y su código está compilado y
+- **El kit de hardware es solo combinacional** (las máquinas de estado, por ahora, solo VHDL), y su código está compilado y
   simulado pero todavía no se ha grabado en las placas. El archivo de la GAL
   sigue la sintaxis de WinCUPL pero no ha pasado por WinCUPL, y el proyecto de
   Quartus no ha pasado por Quartus: ninguno de los dos está instalado donde se

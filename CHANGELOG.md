@@ -2,6 +2,12 @@
 
 ## Sin publicar
 
+- Fase 2, maquinas de estado: se junta el motor de la rama beta (Moore/Mealy, excitacion D/JK/T/SR,
+  diagrama, reporte, editor en la ventana con scroll) y se agrega: contadores (`ktool contador`:
+  modulo, secuencia propia, modos por entradas X/Y con paro, reinicio y set), `ktool fsm`, el VHDL
+  por los tres metodos de la practica (ecuaciones, tabla, diagrama de estados) con banco de prueba
+  generado (`--vhdl`), menu Secuencial y los contadores de la practica en Ejemplos. Verificado
+  con 60 simulaciones en GHDL. Una entrada ya se puede llamar X (el PIC usaba una variable x).
 - Fase 1, proyecto: Archivo > Nuevo / Abrir / Guardar / Guardar como (.ktool.json, mismo
   formato que la rama beta), autoguardado cada 5 s y papelera recuperable; Archivo > Ejemplos
   (mux, demux, decodificadores, prioridad, BCD y hex a 7 seg, sumadores, restadores, comparador,

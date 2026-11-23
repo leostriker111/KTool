@@ -201,6 +201,12 @@ class App:
                              command=lambda: self.resultados.mostrar("kit"))
         menubar.add_cascade(label="Armado", menu=m_armado)
 
+        # maquinas de estado: el editor cubre la tabla (con su boton Volver)
+        m_sec = tk.Menu(menubar, tearoff=0)
+        m_sec.add_command(label="Editor de maquinas de estado", command=self.editor_fsm)
+        m_sec.add_command(label="Contador...", command=lambda: self.editor_fsm().contador())
+        menubar.add_cascade(label="Secuencial", menu=m_sec)
+
         m_help = tk.Menu(menubar, tearoff=0)
         m_help.add_command(label="Guia rapida", command=self.show_guide)
         m_guias = tk.Menu(m_help, tearoff=0)
@@ -938,8 +944,9 @@ class App:
         self._marcar_guardado(None)
 
     def abrir(self, ruta=None):
-        if not self._puede_descartar():
-            return
+        """Abre un proyecto. Si es una maquina de estados va a su editor y la
+        tabla se queda como esta; por eso se pregunta por los cambios de la
+        tabla solo despues de saber que tipo de archivo es."""
         ruta = ruta or filedialog.askopenfilename(
             filetypes=[("Proyecto ktool", "*.ktool.json *.json"), ("Todos", "*.*")])
         if not ruta:
@@ -950,9 +957,13 @@ class App:
             messagebox.showerror("No se pudo abrir", str(e))
             return
         if ktio.doc_type(fuente) == "fsm":
-            messagebox.showinfo("Es una maquina de estados",
-                                "Ese archivo es una maquina de estados. Las maquinas llegan "
-                                "a la ventana con la siguiente version.")
+            # una maquina de estados se abre en su editor
+            try:
+                self.editor_fsm().cargar(fuente)
+            except (KeyError, ValueError, TypeError) as e:
+                messagebox.showerror("El archivo no se pudo leer", str(e))
+            return
+        if not self._puede_descartar():
             return
         try:
             self.aplicar(fuente)
@@ -964,12 +975,24 @@ class App:
     def abrir_ejemplo(self, hacer):
         """Un ejemplo se abre como proyecto nuevo, sin ruta: al guardarlo se
         pregunta donde, para no pisar nada."""
+        proyecto = hacer()
+        if proyecto.get("doc_type") == "fsm":   # los contadores van a su editor
+            self.editor_fsm().cargar(proyecto)
+            return
         if not self._puede_descartar():
             return
-        self.aplicar(hacer())
+        self.aplicar(proyecto)
         self._marcar_guardado(None)
         self._guardado = None          # un ejemplo cuenta como cambio sin guardar
         self._actualizar_titulo()
+
+    def editor_fsm(self):
+        """El editor de maquinas de estado (gui/fsm_view.py), creado una sola vez."""
+        from .fsm_view import FsmView
+        if getattr(self, "_fsm", None) is None:
+            self._fsm = FsmView(self)
+        self._fsm.show()
+        return self._fsm
 
     def generar_todo(self):
         self.resultados.mostrar("generar")

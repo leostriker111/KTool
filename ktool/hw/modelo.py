@@ -59,7 +59,10 @@ RESERVADAS = {
     # los nombres que usan los archivos generados: una senal que se llamara
     # igual chocaria (en VHDL, sin importar mayusculas)
     "circuito", "tb_circuito", "combinacional", "prueba", "dut", "i", "fila",
-    "errores", "x", "m",
+    "errores", "maquina", "tb_maquina", "ecuaciones", "tabla", "estados", "actual",
+    "siguiente", "estado", "entradas", "clk", "rst", "terminado", "revisar",
+    "obtenido", "esperado", "ciclo", "fallas", "reloj", "estimulo", "registro",
+    "transicion", "salidas", "flipflops", "t_estado",
     # C / C++ / Python
     "int", "char", "void", "return", "do", "def", "class", "true", "false",
     "none", "pass", "import", "from", "as", "elif", "try", "lambda", "global",

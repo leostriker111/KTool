@@ -39,6 +39,106 @@ from .core.simplify import solve_output, shared_terms
 from .render import codegen
 from .render.report import Options, build_report, save_report
 
+_FSM_EPILOG = """\
+Formato del .json (maquina de estados):
+
+  {
+    "name": "Mi maquina",
+    "kind": "moore",                    # moore | mealy
+    "inputs": ["X"],                    # [] = contador libre (solo reloj)
+    "state_bits": ["Q2", "Q1", "Q0"],   # flip-flops, el primero es el bit alto
+    "outputs": ["a","b","c","d","e","f","g"],
+    "states": [
+      {"name": "S7", "code": "111", "label": "R", "out": "0000101"}
+    ],
+    "transitions": [
+      {"from": "S7", "in": "0", "to": "S6"}
+    ]
+  }
+
+  code = el codigo binario del estado    out = su salida (Moore)
+  in   = los bits de entrada ("" si no hay)
+
+Ejemplos en la carpeta ejemplos/ del repositorio:
+    ktool fsm ejemplos/letrero_tool/maquina.json --ff T --vhdl vhdl_letrero
+"""
+
+_CONTADOR_EPILOG = """\
+Ejemplos (los de la practica de Circuitos Secuenciales):
+    ktool contador --mod 13 --baja
+    ktool contador --secuencia 4,7,2,6,0,3,5,1 --entradas X --modo 0=sigue --modo 1=paro
+    ktool contador --entradas X,Y --modo 00=0-15 --modo 01=paro --modo 10=reinicio ^
+                   --modo 11=15,12,9,6,3,0 --ff JK --vhdl vhdl_mod16
+
+Cada modo: una lista (4,7,2), un rango (0-15 sube, 12-0 baja), 'paro' (se queda),
+'reinicio' (al primer numero), 'set' (todos los flip-flops a 1) o 'sigue' (la
+--secuencia o el --mod). Si un modo arranca desde un numero que no esta en su
+lista, salta al primero de esa lista.
+"""
+
+
+def _opciones_secuenciales(sp):
+    """Las opciones que comparten 'fsm' y 'contador'."""
+    sp.add_argument("--ff", default="D", help="flip-flop: D, T, JK o SR (por omision D)")
+    sp.add_argument("--form", choices=["sop", "pos", "auto", "both"], default="auto",
+                    help="forma de las ecuaciones (auto = la mas barata)")
+    sp.add_argument("--out", help="ruta del documento HTML")
+    sp.add_argument("--no-open", action="store_true", help="no abrir el navegador")
+    sp.add_argument("--no-circuit", action="store_true", help="no dibujar circuitos")
+    sp.add_argument("--langs", help="lenguajes a incluir (ej: verilog,vhdl)")
+    sp.add_argument("--no-langs", action="store_true", help="omitir el bloque de lenguajes")
+    sp.add_argument("--title", help="titulo del documento")
+    sp.add_argument("--vhdl", metavar="CARPETA",
+                    help="escribir el VHDL por los 3 metodos y su banco de prueba")
+
+
+def _maquina_de_contador(args):
+    """Los argumentos de `ktool contador` -> el dict de la maquina."""
+    from .fsm import contadores
+    base = None
+    if args.secuencia:
+        base = [int(x) for x in args.secuencia.replace(" ", "").split(",") if x]
+    elif args.mod:
+        base = (contadores.descendente(args.mod) if args.baja
+                else contadores.ascendente(args.mod))
+    entradas = [e.strip() for e in (args.entradas or "").split(",") if e.strip()]
+    if not entradas:
+        if base is None:
+            raise ValueError("di que cuenta: --mod N o --secuencia 4,7,2...")
+        modos = {"": base}
+    else:
+        modos = {}
+        for pedido in args.modo or []:
+            combo, _, que = pedido.partition("=")
+            combo = combo.strip()
+            if len(combo) != len(entradas) or set(combo) - {"0", "1"}:
+                raise ValueError(f"--modo {pedido!r}: la combinacion debe tener "
+                                 f"{len(entradas)} bits (uno por entrada: {', '.join(entradas)})")
+            modos[combo] = contadores.leer_modo(que, base)
+    titulo = args.titulo or ("Contador " + (f"mod-{args.mod}" if args.mod else "con secuencia"))
+    return contadores.contador(titulo, modos, entradas, bits=args.bits)
+
+
+def _correr_secuencial(args, fuente):
+    """Documento (y VHDL si se pide) de una maquina ya armada como dict."""
+    from .fsm import Machine
+    from .hw import vhdl_fsm
+    from .render.fsm_report import build_fsm_report, save_report
+    try:
+        maquina = Machine.from_dict(fuente)
+        html = build_fsm_report(maquina, ff_kind=args.ff, title=args.title,
+                                langs=_resolve_langs(args), circuit_on=not args.no_circuit,
+                                form=args.form, fuente=fuente)
+        if args.vhdl:
+            nombres = vhdl_fsm.escribir(fuente, args.vhdl, args.ff)
+    except (ValueError, KeyError) as e:
+        raise SystemExit(f"maquina invalida: {e}")
+    ruta = save_report(html, args.out, open_browser=not args.no_open)
+    print(f"documento generado: {ruta}")
+    if args.vhdl:
+        print(f"VHDL en {args.vhdl}: {', '.join(nombres)}")
+
+
 def _canon_lang(tok):
     canon = {name.lower(): name for name in codegen.LANG_ORDER}
     return canon.get(tok.lower()) or codegen.LANG_ALIASES.get(tok.lower())
@@ -68,6 +168,28 @@ def _build_parser():
     )
     sub = p.add_subparsers(dest="cmd")
     sub.add_parser("gui", help="abre la interfaz grafica")
+
+    # maquinas de estado
+    fsm = sub.add_parser("fsm", help="disena una maquina de estados desde un .json",
+                         formatter_class=argparse.RawDescriptionHelpFormatter,
+                         epilog=_FSM_EPILOG)
+    fsm.add_argument("archivo", help="el .json de la maquina (estados y transiciones)")
+    _opciones_secuenciales(fsm)
+
+    cont = sub.add_parser("contador", help="disena un contador sincrono",
+                          formatter_class=argparse.RawDescriptionHelpFormatter,
+                          epilog=_CONTADOR_EPILOG)
+    cont.add_argument("--mod", type=int, help="modulo: cuenta de 0 a mod-1")
+    cont.add_argument("--baja", action="store_true", help="con --mod: cuenta hacia abajo")
+    cont.add_argument("--secuencia", help="la secuencia a recorrer, ej. 4,7,2,6,0,3,5,1")
+    cont.add_argument("--entradas", help="entradas de control, ej. X,Y")
+    cont.add_argument("--modo", action="append", metavar="COMBO=QUE",
+                      help="que hace con cada combinacion de entradas (se repite): "
+                           "00=0-15, 01=paro, 10=reinicio, 11=set, o una lista 15,12,9")
+    cont.add_argument("--bits", type=int, help="cuantos flip-flops (por omision, los justos)")
+    cont.add_argument("--titulo", help="el nombre del contador")
+    cont.add_argument("--json", metavar="RUTA", help="guardar la maquina como .json")
+    _opciones_secuenciales(cont)
 
     # opciones de entrada (comando por defecto = resolver)
     p.add_argument("-n", "--vars", type=int,
@@ -238,6 +360,30 @@ def main(argv=None):
     if args.agregar_al_path:
         from .ruta import agregar_al_path
         raise SystemExit(agregar_al_path())
+
+    if args.cmd == "fsm":
+        import json
+        try:
+            with open(args.archivo, encoding="utf-8") as f:
+                fuente = json.load(f)
+        except FileNotFoundError:
+            raise SystemExit(f"no se encontro el archivo: {args.archivo}")
+        except ValueError as e:
+            raise SystemExit(f"el archivo no es un JSON valido: {e}")
+        _correr_secuencial(args, fuente)
+        return
+
+    if args.cmd == "contador":
+        try:
+            fuente = _maquina_de_contador(args)
+        except ValueError as e:
+            raise SystemExit(str(e))
+        if args.json:
+            from . import io as ktio
+            ktio.save(dict(fuente, doc_type="fsm", ff=args.ff), args.json)
+            print(f"maquina guardada en {args.json}")
+        _correr_secuencial(args, fuente)
+        return
 
     if args.cmd == "gui":
         from .gui import launch

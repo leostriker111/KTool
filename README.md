@@ -69,6 +69,7 @@ before you build something on it.
 - [How to use it (GUI)](#how-to-use-it-gui)
 - [What comes out](#what-comes-out) · [Breadboard build](#breadboard-build-beta) *(beta)*
 - [Hardware kit](#hardware-kit) — the same circuit for PIC, ESP32, Arduino, FPGA, GAL and 74LS
+- [State machines and counters](#state-machines-and-counters) — D, JK, T and SR, VHDL by three methods
 - [Known limitations](#known-limitations)
 - [For developers](#contributing)
 
@@ -319,8 +320,43 @@ take. Fixed pins work for **any board** in the list, not just the MAX II, and th
 From the command line: `--pines max2=26,28,33 --pines uno_nano=2,3,8` and
 `--kit-en-documento`.
 
-Only **combinational** circuits for now. State machines, with clock and reset,
-arrive with Release 3.
+The hardware kit covers **combinational** circuits. State machines have their
+own section, below.
+
+## State machines and counters
+
+Synchronous Moore and Mealy machines, from a table of states and transitions,
+and **counters** described the way the lab exercises word them:
+
+```powershell
+ktool contador --mod 13 --baja
+ktool contador --secuencia 4,7,2,6,0,3,5,1 --entradas X --modo 0=sigue --modo 1=paro
+ktool contador --entradas X,Y --modo 00=0-15 --modo 01=paro --modo 10=reinicio --modo 11=15,12,9,6,3,0 --ff JK --vhdl vhdl_mod16
+ktool fsm maquina.json --ff T
+```
+
+Each mode is a list (`4,7,2`), a range (`0-15` up, `12-0` down), `paro` (hold),
+`reinicio` (back to the first number) or `set` (every flip-flop to 1). If a mode
+starts from a number that isn't in its list, it jumps to that list's first number.
+
+The document walks the whole design: state diagram, state assignment, state
+table, the transition and **excitation table for D, JK, T or SR**, each
+flip-flop input minimised with its K-map, the circuit with the flip-flop bank,
+and the **VHDL by the three methods** of the lab: *equations* (the flip-flop
+equations under a `rising_edge` process), *table* (a `case` over state and
+inputs) and *state diagram* (an enumerated state type). The three share one
+entity, so one generated test bench checks any of them, cycle by cycle.
+
+In the window, the *Secuencial* menu opens the state-machine editor (states and
+transitions as tables, with a live graph) and a *Contador…* dialog. *Archivo >
+Ejemplos > Contadores* has the counters from the lab already set up.
+
+**How it was checked.** The 8 counters from the lab plus 2 more machines, each
+in the 3 methods and with the 4 flip-flop types: **60 GHDL simulations** in
+strict VHDL-93, every mode and random mode switches, all matching the Python
+simulation; the three methods also go through GHDL synthesis. The test suite
+checks that each flip-flop's minimised equations, applied through its
+characteristic equation, reach the right next state on every transition.
 
 ## Known limitations
 
@@ -335,7 +371,7 @@ Worth stating plainly, since the whole point is being trustworthy:
 - **The breadboard build is beta**: verified against the truth table, but
   not yet built on a real bench, without GUI buttons, and tangled on big
   circuits ([#8](https://github.com/leostriker111/KTool/issues/8)).
-- **The hardware kit is combinational only**, and its code has been compiled
+- **The hardware kit is combinational only** (state machines get VHDL only, for now), and its code has been compiled
   and simulated but not yet flashed onto the boards. The GAL file follows
   WinCUPL's syntax but has not been through WinCUPL itself, and the Quartus
   project has not been through Quartus: neither is installed where this was

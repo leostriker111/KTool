@@ -21,6 +21,8 @@ class Ejemplos(unittest.TestCase):
         for _grupo, lista in ejemplos.CATALOGO:
             for titulo, hacer in lista:
                 p = hacer()
+                if p.get("doc_type") == "fsm":      # los contadores: test_fsm.py
+                    continue
                 validar_nombres(p["input_names"], p["output_names"])
                 filas = 1 << len(p["input_names"])
                 for col in p["values"]:

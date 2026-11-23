@@ -134,9 +134,11 @@ class Proyecto(VentanaBase):
     def test_cada_ejemplo_abre_y_resuelve(self):
         for _grupo, lista in ejemplos.CATALOGO:
             for titulo, hacer in lista:
+                proyecto = hacer()
+                if proyecto.get("doc_type") == "fsm":
+                    continue       # los contadores se abren en el editor: clase Secuencial
                 with mock.patch("ktool.gui.app.messagebox.askyesnocancel", return_value=False):
                     self.app.abrir_ejemplo(hacer)
-                proyecto = hacer()
                 self.assertEqual(self.app.input_names, proyecto["input_names"], titulo)
                 self.assertEqual(self.panel.portada["titulo"].get(),
                                  proyecto["proyecto"]["titulo"])
@@ -170,6 +172,56 @@ class Entradas(VentanaBase):
         self.app.expr_target.set("Y_AND")
         self.app.fill_from_expr()
         self.assertEqual(self.app.values[0], [0, 1, 0, 0])
+
+
+class Secuencial(VentanaBase):
+
+    def test_un_ejemplo_de_contador_abre_en_el_editor(self):
+        self.app.abrir_ejemplo(ejemplos.mod16_con_x_y)
+        editor = self.app._fsm
+        self.assertEqual(len(editor.state_rows), 16)
+        self.assertEqual(len(editor.trans_rows), 64)
+        self.assertEqual(editor.e_inputs.get(), "X, Y")
+
+    def test_el_dialogo_de_contador_arma_la_maquina(self):
+        from ktool.gui.fsm_view import DialogoContador
+        editor = self.app.editor_fsm()
+        dialogo = DialogoContador(editor)
+        dialogo.titulo.set("Mod-8 con paro")
+        dialogo.entradas.set("X")
+        dialogo._poner_modos()
+        dialogo.modos["0"].set("4,7,2,6,0,3,5,1")
+        dialogo.modos["1"].set("paro")
+        dialogo.crear()
+        fuente = editor._to_dict()
+        self.assertEqual(fuente["inicial"], "S4")
+        self.assertEqual(len(fuente["states"]), 8)
+        self.assertIn({"from": "S6", "in": "0", "to": "S0"}, fuente["transitions"])
+
+    def test_un_modo_mal_escrito_avisa(self):
+        from ktool.gui.fsm_view import DialogoContador
+        dialogo = DialogoContador(self.app.editor_fsm())
+        dialogo.modos[""].set("hola")
+        with mock.patch("ktool.gui.fsm_view.messagebox.showerror") as error:
+            dialogo.crear()
+        self.assertIn("no entiendo", error.call_args[0][1])
+
+    def test_escribir_vhdl_desde_el_editor(self):
+        self.app.abrir_ejemplo(ejemplos.mod13_descendente)
+        carpeta = os.path.join(self.dir.name, "vhdl")
+        with mock.patch("ktool.gui.fsm_view.filedialog.askdirectory", return_value=carpeta):
+            self.app._fsm.cb_ff.set("JK")
+            self.app._fsm.escribir_vhdl()
+        self.assertEqual(sorted(os.listdir(carpeta)),
+                         ["maquina_ecuaciones_JK.vhd", "maquina_estados.vhd",
+                          "maquina_tabla.vhd", "tb_maquina.vhd"])
+
+    def test_abrir_un_json_de_maquina_va_al_editor(self):
+        from ktool import io as ktio
+        ruta = os.path.join(self.dir.name, "m.ktool.json")
+        ktio.save(ejemplos.mod6_descendente(), ruta)
+        self.app.abrir(ruta)
+        self.assertEqual(len(self.app._fsm.state_rows), 6)
 
 
 if __name__ == "__main__":

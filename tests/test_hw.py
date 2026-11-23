@@ -120,12 +120,12 @@ def evaluar_pasos_pic(lineas, x):
         if m:
             valor = int(m.group(1))
             continue
-        m = re.match(r"if \(\(x & 0x(\w+)\) == 0x(\w+)\) out_\w+ = (\d);", linea)
+        m = re.match(r"if \(\(fila__ & 0x(\w+)\) == 0x(\w+)\) out_\w+ = (\d);", linea)
         if m:
             if x & int(m.group(1), 16) == int(m.group(2), 16):
                 valor = int(m.group(3))
             continue
-        m = re.match(r"for \(uint8_t m = \(uint8_t\)\(x & 0x(\w+)\);", linea)
+        m = re.match(r"for \(uint8_t m__ = \(uint8_t\)\(fila__ & 0x(\w+)\);", linea)
         if m:
             valor ^= bin(x & int(m.group(1), 16)).count("1") % 2
             continue
@@ -182,8 +182,8 @@ class PIC(unittest.TestCase):
         c = Circuito(tabla_al_azar(1, 4, 1))
         renglones = asignar_pines(c, placas.PIC["pic18f4550"])
         texto = micros.pic(c, "pic18f4550", renglones)
-        self.assertIn("if (PORTBbits.RB0) x |= 0x08;   // A", texto)
-        self.assertIn("if (PORTBbits.RB3) x |= 0x01;   // D", texto)
+        self.assertIn("if (PORTBbits.RB0) fila__ |= 0x08;   // A", texto)
+        self.assertIn("if (PORTBbits.RB3) fila__ |= 0x01;   // D", texto)
 
     def test_el_877a_apaga_lo_analogico_con_0x06(self):
         c = Circuito(tabla_al_azar(1, 3, 1))
@@ -256,7 +256,7 @@ class Pines(unittest.TestCase):
         self.assertIn("const uint8_t PIN_Y_AND = A0;", uno)
         self.assertIn("const uint8_t PIN_Y_OR = 13;", uno)
         pic = armado.archivos["pic/pic16f628a.c"]
-        self.assertIn("if (PORTAbits.RA1) x |= 0x01;   // B", pic)
+        self.assertIn("if (PORTAbits.RA1) fila__ |= 0x01;   // B", pic)
         self.assertIn("PORTB = (uint8_t)((out_Y_AND << 5) | (out_Y_OR << 4));", pic)
         # las placas sin pines propios siguen con su reparto de siempre
         self.assertIn("PIN_A = 32;", armado.archivos["esp32/esp32_wroom32/esp32_wroom32.ino"])
