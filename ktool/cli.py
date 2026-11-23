@@ -120,6 +120,10 @@ def _build_parser():
     p.add_argument("--out", help="ruta del documento HTML a generar")
     p.add_argument("--open", action="store_true", help="abrir el documento en el navegador")
     p.add_argument("--title", default="Resultados ktool", help="titulo del documento")
+    p.add_argument("--agregar-al-path", action="store_true",
+                   help="(Windows) si instalaste con pip y 'ktool' no se reconoce: agrega "
+                        "la carpeta de ktool.exe al PATH. Correlo como: "
+                        "python -m ktool --agregar-al-path")
     return p
 
 
@@ -208,6 +212,10 @@ def _generar_kit(table, carpeta, forma, pines_max2=None):
 
 def main(argv=None):
     args = _build_parser().parse_args(argv)
+
+    if args.agregar_al_path:
+        from .ruta import agregar_al_path
+        raise SystemExit(agregar_al_path())
 
     if args.cmd == "gui":
         from .gui import launch

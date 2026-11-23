@@ -89,6 +89,17 @@ irm https://raw.githubusercontent.com/leostriker111/KTool/main/get-ktool.ps1 | i
 
 ```powershell
 pip install git+https://github.com/leostriker111/KTool.git
+python -m ktool -h      # works always, whether or not ktool landed on the PATH
+```
+
+If plain `ktool` then says *"is not recognized"*, pip put it in a folder that
+isn't on your `PATH` (it prints a `WARNING` saying so). That happens with the
+Microsoft Store Python, and when pip falls back to a per-user install. This
+finds the folder and adds it, without touching the rest of your `PATH`; open a
+new terminal afterwards:
+
+```powershell
+python -m ktool --agregar-al-path
 ```
 
 **C — from source:**
@@ -96,8 +107,11 @@ pip install git+https://github.com/leostriker111/KTool.git
 ```powershell
 git clone https://github.com/leostriker111/KTool.git
 cd KTool
-packaging\install.ps1
+powershell -ExecutionPolicy Bypass -File packaging\install.ps1
 ```
+
+`-ExecutionPolicy Bypass` is needed because Windows ships with scripts
+disabled. It applies to that one run only; your settings stay as they were.
 
 Without installing anything, from the project folder: `python -m ktool ...`
 
