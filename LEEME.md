@@ -300,6 +300,12 @@ tabla de pines lleva el aviso junto a ellos.
 
 **Cómo se comprobó.** Cada archivo pasó por la herramienta real de su plataforma, sobre 21 circuitos generados (de 2 a 6 entradas, de 1 a 24 salidas, en todas las formas, incluidos los peores casos de memoria): **88 archivos de PIC** compilados con XC8 v3.10 sin errores ni advertencias; **21 sketches de Arduino** (Uno o Mega) compilados con `arduino-cli`, y **31 sketches de ESP32 (WROOM-32, S3, C3) y Blue Pill** de una muestra de 8 circuitos; **42 bancos de prueba** corridos en GHDL (VHDL) e Icarus Verilog, con todas las combinaciones iguales a la tabla de verdad; y las 21 simulaciones en Python. Encima, las pruebas revisan la lógica de cada salida (la ecuación en C, las máscaras del PIC, el archivo de MicroPython corrido con un `machine` de mentira) fila por fila en unas 150 tablas al azar. El detalle está en [docs/HARDWARE.md](docs/HARDWARE.md).
 
+**También en la ventana.** El botón *Kit de hardware…*, junto a *Generar documento*,
+escribe el kit de la tabla que tienes en pantalla. Es la forma de sacar **varias
+salidas**, que la línea de comandos no permite. Pide la carpeta, la forma y,
+opcional, las patas de la MAX II, y al final dice qué placas quedaron listas y por
+qué se bloquearon las demás.
+
 Por ahora solo circuitos **combinacionales**. Las máquinas de estado, con reloj y
 reset, llegan con el Release 3.
 

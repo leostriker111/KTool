@@ -295,6 +295,12 @@ carries a warning next to them.
 
 **How it was checked.** Every file was put through the real tool for its platform, on 21 generated circuits (2 to 6 inputs, 1 to 24 outputs, every form, the worst cases for memory included): **88 PIC files** compiled with XC8 v3.10 with no errors or warnings; **21 Arduino sketches** (Uno or Mega) compiled with `arduino-cli`, and **31 ESP32 (WROOM-32, S3, C3) and Blue Pill sketches** from a sample of 8 circuits; **42 test benches** run in GHDL (VHDL) and Icarus Verilog, every combination matching the truth table; and the 21 Python simulations. On top of that the test suite checks the logic of each output (the C equation, the PIC's bit masks, the MicroPython file run against a fake `machine` module) row by row on about 150 random tables. Details in [docs/HARDWARE.md](docs/HARDWARE.md).
 
+**In the window too.** The *Kit de hardware…* button, next to *Generar documento*,
+writes the kit for the table on screen. That is the way to get **several outputs**,
+which the command line can't take. It asks for the folder, the form and,
+optionally, the MAX II pins, then shows which boards are ready and why the others
+were blocked.
+
 Only **combinational** circuits for now. State machines, with clock and reset,
 arrive with Release 3.
 

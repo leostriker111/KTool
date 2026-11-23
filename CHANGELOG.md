@@ -2,6 +2,9 @@
 
 ## Sin publicar
 
+- Nuevo: boton **Kit de hardware...** en la GUI (y en Archivo). Escribe el kit de la tabla
+  en pantalla, con varias salidas, en la forma elegida y con las patas de la MAX II si se
+  dan; al final enlista que placas quedaron listas y por que se bloquearon las demas.
 - Nuevo: **kit de hardware** (`--hw CARPETA`). El circuito minimizado como codigo completo
   para PIC (18F4550, 18F45K50, 16F877A, 16F628A, 16F84A, con XC8), ESP32 (WROOM-32, S3 y C3,
   en Arduino y en MicroPython), Arduino Uno/Nano o Mega, Blue Pill (STM32duino), Raspberry Pi

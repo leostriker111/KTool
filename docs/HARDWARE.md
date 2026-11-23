@@ -176,7 +176,9 @@ familia), `PROJECT_OUTPUT_DIRECTORY output_files` en uno de un EPM240T100C5, y
   pasarles los archivos. Del lado de la MAX II lo que falta es solo eso: el
   VHDL ya está sintetizado y simulado después de la síntesis (arriba).
 - **Las máquinas de estado**, con el Release 3.
-- **La GUI** no tiene todavía el botón; por ahora es `--hw` en la CLI.
+- **En la GUI** está el botón *Kit de hardware…*, junto a *Generar documento*:
+  usa la tabla que está en pantalla (con varias salidas, cosa que la CLI no
+  permite), la forma elegida y, opcional, las patas de la MAX II.
 
 ## Cómo se agrega una placa
 

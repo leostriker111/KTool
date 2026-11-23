@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import webbrowser
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, simpledialog
@@ -44,7 +45,11 @@ GUIDE = (
     "4. 'Ecuaciones' muestra SOP, POS, XOR/XNOR y la mejor por costo.\n"
     "5. 'Generar documento' arma un HTML con mapas de Karnaugh, circuitos,\n"
     "   el circuito completo con compuertas compartidas y las ecuaciones en\n"
-    "   varios lenguajes (Verilog, VHDL, ABEL, Logisim, C, ...).\n\n"
+    "   varios lenguajes (Verilog, VHDL, ABEL, Logisim, C, ...).\n"
+    "6. 'Kit de hardware' escribe una carpeta con el circuito listo para\n"
+    "   grabar: PIC, ESP32, Arduino, STM32, Pico, VHDL/Verilog, MAX II,\n"
+    "   GAL22V10, chips 74LS y una simulacion en Python. Si una placa no\n"
+    "   alcanza, te dice por que.\n\n"
     "Renombra una salida haciendo clic en su encabezado."
 )
 
@@ -119,6 +124,7 @@ class App:
 
         m_file = tk.Menu(menubar, tearoff=0)
         m_file.add_command(label="Generar documento", command=self.generate)
+        m_file.add_command(label="Kit de hardware...", command=self.hardware_kit)
         m_file.add_separator()
         m_file.add_command(label="Salir", command=self.root.destroy)
         menubar.add_cascade(label="Archivo", menu=m_file)
@@ -182,6 +188,7 @@ class App:
 
         ttk.Button(bar, text="Ecuaciones", command=self.show_equations).pack(side=tk.LEFT, padx=(12, 4))
         ttk.Button(bar, text="Generar documento", command=self.generate).pack(side=tk.LEFT, padx=4)
+        ttk.Button(bar, text="Kit de hardware...", command=self.hardware_kit).pack(side=tk.LEFT, padx=4)
 
         bar2 = ttk.Frame(self.root, padding=(8, 0, 8, 6))
         bar2.pack(side=tk.TOP, fill=tk.X)
@@ -740,6 +747,131 @@ class App:
         saved = save_report(html, path, open_browser=True)
         self.show_equations()
         messagebox.showinfo("Documento generado", f"Guardado en:\n{saved}")
+
+    # ---------- kit de hardware ----------
+    def hardware_kit(self):
+        """Ventana para escribir el kit de hardware de la tabla que esta en pantalla.
+
+        Pide tres cosas: la carpeta, la forma (la de la barra de arriba por
+        omision) y, opcional, las patas de la MAX II para placas con LEDs y
+        botones en patas fijas. Lo demas lo decide el generador (hw/kit.py),
+        igual que con `ktool --hw` en la terminal.
+        """
+        table = self._current_table()
+        win = tk.Toplevel(self.root)
+        win.title("Kit de hardware")
+        win.transient(self.root)
+        win.resizable(False, False)
+        cuerpo = ttk.Frame(win, padding=12)
+        cuerpo.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(cuerpo, text=(
+            "Escribe una carpeta con el circuito listo para grabar en PIC, ESP32, Arduino,\n"
+            "STM32, Pico, VHDL/Verilog, MAX II, GAL22V10 y chips 74LS. Cada archivo trae\n"
+            "su tabla de pines; si una placa no alcanza, el resumen dice por que."),
+            justify=tk.LEFT).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
+
+        ttk.Label(cuerpo, text="Carpeta:").grid(row=1, column=0, sticky="w")
+        carpeta = tk.StringVar(value=os.path.join(os.path.expanduser("~"), "Documents", "ktool_kit"))
+        ttk.Entry(cuerpo, textvariable=carpeta, width=52).grid(row=1, column=1, sticky="we", padx=4)
+
+        def elegir():
+            elegida = filedialog.askdirectory(parent=win, title="Carpeta del kit",
+                                              initialdir=os.path.dirname(carpeta.get()))
+            if elegida:
+                carpeta.set(elegida)
+        ttk.Button(cuerpo, text="Elegir...", command=elegir).grid(row=1, column=2)
+
+        # 'both' es solo para el documento; para grabar hace falta una sola forma
+        actual = self.form.get() if self.form.get() in ("sop", "pos") else "auto"
+        forma = tk.StringVar(value=actual)
+        ttk.Label(cuerpo, text="Forma:").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        ttk.OptionMenu(cuerpo, forma, actual, "auto", "sop", "pos", "nand", "nor").grid(
+            row=2, column=1, sticky="w", padx=4, pady=(8, 0))
+
+        ttk.Label(cuerpo, text="Patas MAX II:").grid(row=3, column=0, sticky="w", pady=(8, 0))
+        pines = tk.StringVar()
+        ttk.Entry(cuerpo, textvariable=pines, width=52).grid(row=3, column=1, sticky="we",
+                                                           padx=4, pady=(8, 0))
+        orden = ", ".join(table.variables) + "  luego  " + ", ".join(table.outputs)
+        ttk.Label(cuerpo, foreground="#777", text=(
+            f"Opcional. En este orden: {orden}.\n"
+            "Vacio = ktool las escoge. Ej: 26,28,33,73")).grid(
+            row=4, column=1, columnspan=2, sticky="w", padx=4)
+
+        botones = ttk.Frame(cuerpo)
+        botones.grid(row=5, column=0, columnspan=3, sticky="e", pady=(12, 0))
+        ttk.Button(botones, text="Cancelar", command=win.destroy).pack(side=tk.RIGHT, padx=(6, 0))
+        ttk.Button(botones, text="Generar",
+                   command=lambda: self._write_kit(win, table, carpeta.get(), forma.get(),
+                                                   pines.get())).pack(side=tk.RIGHT)
+        win.grab_set()
+
+    def _write_kit(self, win, table, carpeta, forma, pines_texto):
+        """Valida lo que se escribio, genera y muestra el resumen."""
+        from ..hw import kit
+
+        carpeta = carpeta.strip()
+        if not carpeta:
+            messagebox.showerror("Falta la carpeta", "Escribe o elige una carpeta.", parent=win)
+            return
+        pines = None
+        if pines_texto.strip():
+            try:
+                pines = [int(p) for p in pines_texto.replace(",", " ").split()]
+            except ValueError:
+                messagebox.showerror("Patas invalidas",
+                                     "Las patas son numeros separados por comas, ej. 26,28,33.",
+                                     parent=win)
+                return
+        if os.path.isdir(carpeta) and os.listdir(carpeta):
+            if not messagebox.askyesno(
+                    "La carpeta ya tiene archivos",
+                    f"{carpeta}\n\nya tiene archivos. Los del kit se reemplazan; los demas "
+                    "se quedan. Seguir?", parent=win):
+                return
+
+        win.config(cursor="watch")
+        win.update_idletasks()
+        try:
+            resumen = kit.generar(table, carpeta, forma, pines)
+        except ValueError as e:   # nombres que no compilan, patas que no son de I/O...
+            messagebox.showerror("No se pudo generar", str(e), parent=win)
+            return
+        finally:
+            win.config(cursor="")
+        win.destroy()
+        self._show_kit_result(carpeta, resumen)
+
+    def _show_kit_result(self, carpeta, resumen):
+        """Lo que salio y lo que se bloqueo, plataforma por plataforma."""
+        listos = sum(1 for _, estado, _ in resumen if estado == "listo")
+        lineas = [f"Kit escrito en:\n  {carpeta}", "",
+                  f"{listos} de {len(resumen)} listos.", ""]
+        for plataforma, estado, detalle in resumen:
+            if estado == "listo":
+                lineas.append(f"  ok  {plataforma}")
+            else:
+                lineas.append(f"  --  {plataforma}")
+                lineas.append(f"      {detalle}")
+        lineas += ["", "El resumen completo esta en LEEME.md dentro de la carpeta.",
+                   "Antes de grabar: python python/simular.py compara las ecuaciones",
+                   "con tu tabla."]
+
+        win = tk.Toplevel(self.root)
+        win.title("Kit de hardware")
+        # alto segun lo que hay que decir, para que no se corte el ultimo renglon
+        txt = tk.Text(win, wrap="word", width=88, height=min(len(lineas) + 1, 40),
+                      font=("Consolas", 10), padx=10, pady=10)
+        txt.pack(fill=tk.BOTH, expand=True)
+        txt.insert("1.0", "\n".join(lineas))
+        txt.config(state="disabled")
+        barra = ttk.Frame(win, padding=6)
+        barra.pack(fill=tk.X)
+        ttk.Button(barra, text="Cerrar", command=win.destroy).pack(side=tk.RIGHT)
+        if hasattr(os, "startfile"):   # abrir la carpeta solo existe en Windows
+            ttk.Button(barra, text="Abrir carpeta",
+                       command=lambda: os.startfile(carpeta)).pack(side=tk.RIGHT, padx=6)
 
     # ---------- ventanas de ayuda ----------
     def _text_window(self, title, content, width=70, height=18):
