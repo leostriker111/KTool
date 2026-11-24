@@ -69,8 +69,9 @@ def state_diagram_svg(machine):
     idx = {s.name: i for i, s in enumerate(states)}
     nr = 34
     R = max(120, int(n * 30))
-    cx = cy = R + nr + 46
-    size = 2 * (R + nr + 46)
+    margen = 46 + nr * 2   # sitio para los lazos y sus etiquetas
+    cx = cy = R + nr + margen
+    size = 2 * (R + nr + margen)
     pos = _node_positions(n, cx, cy, R)
 
     out = [
@@ -78,13 +79,19 @@ def state_diagram_svg(machine):
         f'font-family="Georgia, serif">', _ARROW,
     ]
 
-    # transiciones agrupadas por (origen, destino)
+    # transiciones agrupadas por (origen, destino); las combinaciones de
+    # entrada se fusionan en cubos (B'T'C'PEA + ... -> B') para que la
+    # etiqueta sea corta aunque la maquina liste las 2^n combinaciones
     grouped = {}
     for t in machine.transitions:
-        cond = _cond_label(machine, t)
-        grouped.setdefault((t.src, t.dst), []).append(cond)
+        key = (t.src, t.dst)
+        grouped.setdefault(key, {}).setdefault(t.out, []).append(t.inp)
 
-    for (src, dst), conds in grouped.items():
+    for (src, dst), por_salida in grouped.items():
+        conds = []
+        for salida, inps in por_salida.items():
+            for cubo in _fusionar_cubos(inps):
+                conds.append(_cond_cubo(machine, cubo, salida))
         label = ", ".join(c for c in conds if c)
         p1, p2 = pos[idx[src]], pos[idx[dst]]
         if src == dst:
@@ -110,6 +117,48 @@ def state_diagram_svg(machine):
 
     out.append("</svg>")
     return "\n".join(out)
+
+
+def _fusionar_cubos(inps):
+    """Quine-McCluskey chico: junta combinaciones de entrada ('0101', ...) en
+    cubos con '-' y elige un cubrimiento. Si no hay entradas, devuelve ['']."""
+    inps = sorted(set(inps))
+    if not inps or not inps[0]:
+        return [""]
+    primos, actual = set(), set(inps)
+    while actual:
+        siguiente, usados = set(), set()
+        lista = sorted(actual)
+        for i, a in enumerate(lista):
+            for b in lista[i + 1:]:
+                dif = [k for k in range(len(a)) if a[k] != b[k]]
+                if len(dif) == 1 and "-" not in (a[dif[0]], b[dif[0]]):
+                    siguiente.add(a[:dif[0]] + "-" + a[dif[0] + 1:])
+                    usados.update((a, b))
+        primos |= actual - usados
+        actual = siguiente
+
+    def cubre(cubo, x):
+        return all(c == "-" or c == b for c, b in zip(cubo, x))
+
+    faltan, elegidos = set(inps), []
+    while faltan:
+        mejor = max(sorted(primos), key=lambda c: sum(cubre(c, x) for x in faltan))
+        elegidos.append(mejor)
+        faltan = {x for x in faltan if not cubre(mejor, x)}
+    return elegidos
+
+
+def _cond_cubo(machine, cubo, salida):
+    if not machine.inputs:
+        cond = ""
+    else:
+        parts = [(v if b == "1" else v + "'")
+                 for v, b in zip(machine.inputs, cubo) if b != "-"]
+        cond = "".join(parts) or "1"
+    if machine.kind == "mealy" and salida is not None:
+        cond += f" / {salida}"
+    return cond
 
 
 def _cond_label(machine, t):

@@ -575,6 +575,6 @@ def flipflop_bank_svg(state_bits, ff_inputs):
     # linea de reloj comun
     if clk_ys:
         s.append(f'<line x1="{clk_x}" y1="{min(clk_ys)}" x2="{clk_x}" y2="{max(clk_ys)}" stroke="#000" stroke-width="1.3"/>')
-        s.append(f'<text x="{clk_x - 4}" y="{min(clk_ys) - 6}" font-size="12" text-anchor="end">CLK</text>')
+        s.append(f'<text x="{clk_x}" y="{max(clk_ys) + 17}" font-size="12" text-anchor="middle">CLK</text>')
     s.append("</svg>")
     return "\n".join(s)

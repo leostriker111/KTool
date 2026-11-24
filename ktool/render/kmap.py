@@ -37,6 +37,9 @@ def kmap_svg(values, variables, patterns=None, title=None):
 
     left = 78
     top = 56
+    # la esquina 'Q1 Q0\B T C PEA' es larga con 5-6 variables: ensanchar a la izquierda
+    _esq = sum(len(variables[i]) for i in range(n)) * 8 + 4 * 7 + 22
+    left = max(left, _esq)
     width = left + ncols * CELL + 20
     height = top + nrows * CELL + 20
 
@@ -56,7 +59,7 @@ def kmap_svg(values, variables, patterns=None, title=None):
 
     # encabezados de variables
     out.append(
-        f'<text x="{left - 60}" y="{top - 8}" font-size="13" font-style="italic">'
+        f'<text x="{left - 8}" y="{top - 8}" font-size="13" font-style="italic" text-anchor="end">'
         f'{_esc(row_label)}\\{_esc(col_label)}</text>'
     )
     # encabezados de columnas (gray)

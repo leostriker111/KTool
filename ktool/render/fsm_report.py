@@ -16,6 +16,7 @@ from .report import (_CSS, _CLIP_SCRIPT, _kmap_for_form, _seccion_portada, boton
 _FF_NAME = {"D": "Tipo D", "T": "Tipo T", "JK": "JK", "SR": "SR"}
 
 _EXTRA_CSS = """
+@media print{h2,h3{break-after:avoid;} svg,.cwrap,.diagram,.card{break-inside:avoid;} .bt thead{display:table-header-group;} .bt tr{break-inside:avoid;}}
 .diagram{background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px;
   margin:10px 0;overflow-x:auto;text-align:center;}
 .bt td,.bt th{border:1px solid #999;padding:2px 7px;text-align:center;font-size:12px;}
@@ -59,26 +60,30 @@ def _encoding_table(machine):
 
 
 def _state_table(machine):
-    show_out = bool(machine.outputs)
-    head = ["Estado actual", "Codigo"]
-    if machine.inputs:
-        head.append(", ".join(machine.inputs))
-    head += ["Estado sig.", "Codigo sig."]
-    if show_out:
-        head.append("Salida")
-    ths = "".join(f"<th>{_esc(h)}</th>" for h in head)
+    """Una columna por variable: estado actual (Q..), entradas, estado
+    siguiente (Q+..) y cada salida; no cadenas de bits pegadas."""
+    qs = list(machine.state_bits)
+    ths = ["Estado actual"] + qs + list(machine.inputs) + ["Estado sig."] \
+        + [q + "+" for q in qs] + list(machine.outputs)
+    n_q, n_i = len(qs), len(machine.inputs)
+    sep = {1, 1 + n_q, 1 + n_q + n_i, 2 + n_q + n_i, 2 + 2 * n_q + n_i}
+    head = "".join(f"<th{' class=\'sep\'' if k in sep else ''}>{_esc(h)}</th>"
+                   for k, h in enumerate(ths))
+
+    def bits(cadena, n):
+        c = cadena if cadena else ""
+        return [c[k] if k < len(c) else "-" for k in range(n)]
+
     rows = []
     for r in machine.state_table():
         st, dst = r["state"], r["next"]
-        cells = [f"<td><b>{_esc(st.label)}</b></td>", f"<td class='idx'>{_esc(st.code)}</td>"]
-        if machine.inputs:
-            cells.append(f"<td>{_esc(r['inp'])}</td>")
-        cells.append(f"<td><b>{_esc(dst.label) if dst else '-'}</b></td>")
-        cells.append(f"<td class='idx'>{_esc(dst.code) if dst else '-'}</td>")
-        if show_out:
-            cells.append(f"<td><code>{_esc(r['out'] or '-')}</code></td>")
-        rows.append("<tr>" + "".join(cells) + "</tr>")
-    return f"<table class='bt'><thead><tr>{ths}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
+        celdas = [f"<b>{_esc(st.label)}</b>"] + bits(st.code, n_q) + bits(r["inp"], n_i) \
+            + [f"<b>{_esc(dst.label) if dst else '-'}</b>"] + bits(dst.code if dst else "", n_q) \
+            + bits(r["out"], len(machine.outputs))
+        tds = "".join(f"<td{' class=\'sep\'' if k in sep else ''}>{c}</td>"
+                      for k, c in enumerate(celdas))
+        rows.append(f"<tr>{tds}</tr>")
+    return f"<table class='bt'><thead><tr>{head}</tr></thead><tbody>{''.join(rows)}</tbody></table>"
 
 
 def _binary_table(variables, groups):
@@ -193,6 +198,10 @@ def _full_circuit(machine, ff_kind, exc_sols, out_sols, io_vars, out_vars):
 
 def _word_strip(machine):
     if machine.kind != "moore" or not machine.outputs:
+        return ""
+    # solo tiene sentido si las salidas son los segmentos a-g de un display
+    if not set(o.lower() for o in machine.outputs) <= set("abcdefg") and \
+            [o.lower() for o in machine.outputs] != list("abcdefg"):
         return ""
     cells = []
     for s in machine.states:
